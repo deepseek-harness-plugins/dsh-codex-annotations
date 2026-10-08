@@ -28,7 +28,9 @@ await writeFile(patch, JSON.stringify([
   { insert: [{ id: 'dca-fixture', name: pathToFileURL(join(project, 'tests/mock-model.mjs')).href }] }
 ]));
 const referenceQuote = '失的是助手回答正文，用量数字还在。这和刚才启用插件时出现的显示问题一致；我先检查你现在的窗';
+const linkedQuote = '链接前文 dsh-annotation 和 dsh-sidenote，包含 Annotations ×N 与加粗文本。';
 const fixtureText = '这个插件会把选中的原文和你的评论随下一条消息一起发给模型。你可以连续添加多条批注，并随时返回原文查看。\n\n```js\nconst greeting = "你好🙂";\nconsole.log(greeting);\n```\n\n| 功能 | 状态 |\n| --- | --- |\n| 空评论 | 支持 |\n| 多条批注 | 支持 |\n\n'
+  + '链接前文 [dsh-annotation](https://github.com/omdsh-dev/dsh-annotation) 和 [dsh-sidenote](https://github.com/g-yixuan/dsh-sidenote)，包含 `Annotations ×N` 与**加粗文本**。\n\n'
   + Array.from({ length: 40 }, (_, i) => `长回答的第 ${i + 1} 段。跳转应定位具体选区，保留输入框，并避开顶部栏和批注浮层。`).join('\n\n')
   + '\n\n截图里消失的是助手回答正文，用量数字还在。这和刚才启用插件时出现的显示问题一致；我先检查你现在的窗口，再定位插件为何会把正文隐藏。';
 const sourceDir = join(home, 'sessions', '-' + workspace.replaceAll('/', '-') + '--');
@@ -142,6 +144,34 @@ try {
       assert.equal(await page.locator('.dca-float').count(), 0, 'Quote navigation must close overlays instead of opening another details card');
     }
   };
+  await select(linkedQuote); await page.getByRole('button', { name:'添加到对话', exact:true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name:'批注 1，待发送', exact:true }).waitFor();
+  const linkEvidence = await body.evaluate((el, quote) => {
+    const paragraph = [...el.querySelectorAll('p')].find(p=>p.textContent===quote);
+    const links = [...paragraph.querySelectorAll('a')];
+    const full = document.createRange(); full.selectNodeContents(paragraph);
+    const rects = [...full.getClientRects()].map(r=>({left:r.left,top:r.top,width:r.width,height:r.height}));
+    const point = node => {const r=document.createRange();r.selectNodeContents(node);const b=r.getClientRects()[0];return {x:b.left+b.width/2,y:b.top+1};};
+    return {rects, points:{plain:point(paragraph.firstChild),link1:point(links[0].lastChild),link2:point(links[1].lastChild)},
+      hrefs:links.map(a=>a.getAttribute('href')),hitLinks:links.map(a=>{const b=a.getBoundingClientRect();return document.elementFromPoint(b.left+b.width/2,b.top+b.height/2)?.closest('a')===a;})};
+  },linkedQuote);
+  const linkShot = await page.screenshot({scale:'device',path:join(artifacts,`linked-highlight-${process.env.DCA_LINK_CAPTURE ?? 'after'}@2x.png`)});
+  linkEvidence.colors = await page.evaluate(async ({png,points}) => {
+    const picture=new Image();picture.src='data:image/png;base64,'+png;await picture.decode();
+    const canvas=document.createElement('canvas');canvas.width=picture.width;canvas.height=picture.height;
+    const c=canvas.getContext('2d',{willReadFrequently:true});c.drawImage(picture,0,0);
+    return Object.fromEntries(Object.entries(points).map(([key,p])=>[key,[...c.getImageData(Math.floor(p.x*2),Math.floor(p.y*2),1,1).data]]));
+  },{png:linkShot.toString('base64'),points:linkEvidence.points});
+  await writeFile(join(artifacts,`linked-highlight-${process.env.DCA_LINK_CAPTURE ?? 'after'}.json`),JSON.stringify(linkEvidence,null,2));
+  if(process.env.DCA_LINK_CAPTURE!=='before') {
+    assert.deepEqual(linkEvidence.colors.link1,linkEvidence.colors.plain,'First link must not receive a second blue layer');
+    assert.deepEqual(linkEvidence.colors.link2,linkEvidence.colors.plain,'Second link must not receive a second blue layer');
+  }
+  assert.deepEqual(linkEvidence.hitLinks,[true,true],'Highlight must preserve native hyperlink click targets');
+  await page.getByRole('button', { name:'批注 1，待发送', exact:true }).click();
+  await page.getByRole('button', { name:'删除批注 1', exact:true }).click();
+  await page.locator('[data-dca-marker]').waitFor({state:'hidden'});
   await select(referenceQuote); await screenshots('01-selection-menu');
   await measureControl('menu', '.dca-menu');
   assert.equal(uiMeasurements.menu.height, 30);

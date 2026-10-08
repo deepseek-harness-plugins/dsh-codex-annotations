@@ -111,11 +111,15 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
         const bounds = root.current.getBoundingClientRect(); const used = [];
         setLayout(notes.flatMap(note => {
           const range = restoreRange(source.current, note); if (!range) return [];
-          // Nested inline/code elements can repeat the same rectangle. Painting
-          // it twice changes the selection color even though the text is identical.
-          const unique = new Map([...range.getClientRects()].filter(r => r.width > 0 && r.height > 0).map(r => [JSON.stringify([r.left, r.top, r.width, r.height]), r]));
-          const rects = [...unique.values()].map(r => ({ left: r.left - bounds.left, top: r.top - bounds.top, width: r.width, height: r.height }));
+          const rects = [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0)
+            .map(r => ({ left: r.left - bounds.left, top: r.top - bounds.top, width: r.width, height: r.height }));
           if (!rects.length) return [];
+          // Links/code yield overlapping element and text rectangles. One
+          // nonzero SVG path fills their union once, including unequal boxes.
+          const paint = { left: Math.min(...rects.map(r => r.left)), top: Math.min(...rects.map(r => r.top)) };
+          paint.width = Math.max(...rects.map(r => r.left + r.width)) - paint.left;
+          paint.height = Math.max(...rects.map(r => r.top + r.height)) - paint.top;
+          const path = rects.map(r => `M${r.left - paint.left},${r.top - paint.top}h${r.width}v${r.height}h${-r.width}Z`).join('');
           const firstTop = Math.min(...rects.map(r => r.top));
           const firstRight = Math.max(...rects.filter(r => Math.abs(r.top - firstTop) < 2).map(r => r.left + r.width));
           let left = Math.max(0, Math.min(firstRight - 27, bounds.width - 27)), top = firstTop - 29;
@@ -125,7 +129,7 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
             if (left < 0) { left = initialLeft; top -= 31; }
           }
           used.push({ left, top });
-          return [{ note, rects, left, top }];
+          return [{ note, paint, path, left, top }];
         }));
       });
     };
@@ -156,8 +160,8 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
   return <div ref={root} className="dca-source" data-dca-node-key={nodeKey} data-dca-session={face.sessionId}>
     <div ref={source} data-dca-content="" onPointerUp={() => setTimeout(selected, 0)} onKeyUp={selected}><Inner {...props}/></div>
     <div className="dca-layer" data-dca-ui="">
-      {layout.map(({ note, rects, left, top }) => <React.Fragment key={note.id}>
-        {rects.map((rect, i) => <span key={i} data-dca-highlight={note.id} className={`dca-highlight ${note.status === 'sent' ? 'dca-sent' : ''}`} style={rect}/>)}
+      {layout.map(({ note, paint, path, left, top }) => <React.Fragment key={note.id}>
+        <svg data-dca-highlight={note.id} className={`dca-highlight ${note.status === 'sent' ? 'dca-sent' : ''}`} style={paint} viewBox={`0 0 ${paint.width} ${paint.height}`} aria-hidden="true"><path d={path} fillRule="nonzero"/></svg>
         <button className="dca-marker" data-dca-marker={note.id} style={{ left, top }} aria-label={`批注 ${note.number}，${note.status === 'sent' ? '已发送' : '待发送'}`}
           onClick={() => { setSelection(null); setOpen({ kind: note.status === 'sent' ? 'details' : 'edit', note }); }}>{note.number}</button>
       </React.Fragment>)}

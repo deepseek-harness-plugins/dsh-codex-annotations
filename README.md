@@ -22,20 +22,22 @@
 
 点击详情卡中的所选文本，会收起浮层并跳转、高亮对应原文；定位具体选区，避开顶部栏和底部输入框。点击铅笔才打开编辑器，评论框与蓝色编号相互避让，长评论展开时重新计算所需空间。
 
+同一条批注的高亮底色统一绘制，避免超链接、行内代码或加粗文字的嵌套选区重复叠加；链接继续保持原生点击行为。
+
 ## 安装
 
-适用于 **DSH Desktop / Web 0.2.0-rc.2**。当前版本 0.2.5，尚未发布到 npm。仓库包含构建产物，可直接打包本地安装：
+适用于 **DSH Desktop / Web 0.2.0-rc.2**。当前版本 0.2.6，尚未发布到 npm。仓库包含构建产物，可直接打包本地安装：
 
 ```sh
 cd /path/to/dsh-codex-annotations
 npm pack
-dsh plugin --profile desktop add /path/to/deepseekharness-plugin-dsh-codex-annotations-0.2.5.tgz
+dsh plugin --profile desktop add /path/to/deepseekharness-plugin-dsh-codex-annotations-0.2.6.tgz
 ```
 
 使用 Web 时把 `desktop` 换成 `web`。如果系统没有 `dsh` 命令，macOS 应用内的入口为：
 
 ```sh
-'/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh' plugin --profile desktop add /absolute/path/to/deepseekharness-plugin-dsh-codex-annotations-0.2.5.tgz
+'/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh' plugin --profile desktop add /absolute/path/to/deepseekharness-plugin-dsh-codex-annotations-0.2.6.tgz
 ```
 
 安装后重新打开 DSH。首次试用时建议暂时停用其他选区/批注插件，避免多个菜单同时出现。CLI/TUI 不提供这些图形交互。
