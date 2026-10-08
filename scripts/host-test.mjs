@@ -175,7 +175,7 @@ try {
   await page.getByRole('button', { name: '批注 1，待发送', exact: true }).click();
   assert.equal(await comment.inputValue(), '', 'Cancel must preserve the saved comment');
   await comment.fill('测试1'); await screenshots('02-inline-comment'); await comment.press('Enter');
-  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
   await measureControl('annotations', '.dca-annotations');
   assert.equal(uiMeasurements.annotations.width, 384);
   assert.equal(uiMeasurements.annotations.height, 143);
@@ -191,8 +191,11 @@ try {
   assert.ok(await page.locator('[data-chat-group-part="response"] .dca-source').count() > 0);
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await page.locator('[data-conversation-scroll]').evaluate(el => el.scrollTo({ top: 0, behavior: 'instant' }));
-  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
   await page.locator('.dca-quote').click();
+  await assertQuoteVisible(1);
+  await page.locator('[data-conversation-scroll]').evaluate(el => el.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
   await assertQuoteVisible(1);
   await screenshots('12-long-answer-jump');
   const previewInput = page.locator('[contenteditable=true]').first();
@@ -201,7 +204,7 @@ try {
   for (const [index, line] of draftLines.entries()) { if (index) await previewInput.press('Shift+Enter'); await page.keyboard.insertText(line); }
   const tallDraft = await previewInput.innerText();
   assert.ok(draftLines.every(line => tallDraft.includes(line)), 'Native composer must contain all multiline draft input');
-  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
   await page.locator('.dca-annotations').getByRole('button', { name: '编辑批注 1', exact: true }).click();
   await comment.fill(Array.from({ length: 12 }, (_, i) => `第 ${i + 1} 行编辑内容`).join('\n'));
   await assertQuoteVisible(1, true);
@@ -211,13 +214,15 @@ try {
   await previewInput.click(); await previewInput.press('ControlOrMeta+a'); await previewInput.press('Backspace');
   await page.waitForFunction(() => document.querySelector('[contenteditable=true]').innerText.trim() === '');
   await page.setViewportSize({ width: 480, height: 860 });
-  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
   await page.locator('.dca-annotations').getByRole('button', { name: '编辑批注 1', exact: true }).click();
   await assertQuoteVisible(1, true);
   await screenshots('14-narrow-jump-edit');
   await page.getByRole('button', { name: '取消', exact: true }).click();
-  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
   await page.locator('.dca-quote').click();
+  await assertQuoteVisible(1);
+  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
   await assertQuoteVisible(1);
   await page.setViewportSize({ width: 1280, height: 900 });
   await select('连续添加多条批注'); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
@@ -243,7 +248,7 @@ try {
   assert.equal(await page.locator('[data-dca-dock]').count(), 0);
   assert.equal(await page.locator('.dca-sent-pills .dca-batch-chip').count(), 1);
   assert.equal(await page.getByText('[DSH_ANNOTATIONS_V1:', { exact: false }).count(), 0);
-  await page.locator('.dca-sent-pills .dca-batch-chip').first().click(); await page.locator('.dca-annotations').waitFor();
+  await page.locator('.dca-sent-pills .dca-batch-chip').first().hover(); await page.locator('.dca-annotations').waitFor();
   assert.equal(await page.locator('.dca-annotation').count(), 2);
   await page.locator('.dca-quote').first().click();
   assert.equal(await page.locator('.dca-float').count(), 0, 'Sent quote navigation must close its details card');
@@ -252,6 +257,8 @@ try {
     const first = marks[0].getBoundingClientRect(), pane = marks[0].closest('[data-conversation-scroll]');
     return first.top > pane.getBoundingClientRect().top + 36 && first.bottom < pane.querySelector('[data-composer-seat]').getBoundingClientRect().top - 12;
   });
+  await page.locator('.dca-sent-pills .dca-batch-open').first().click();
+  assert.equal(await page.locator('.dca-float').count(), 0, 'Clicking a sent annotation chip must jump without opening a popup');
   await select('const greeting = "你好🙂";\nconsole.log(greeting);');
   await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.getByRole('textbox', { name: '批注 3 的可选评论', exact: true }).click();
@@ -277,11 +284,11 @@ try {
   assert.ok(!await input.innerText().then(t => /@\s*批注/.test(t)));
   await page.getByRole('button', { name: '附加批注', exact: true }).click();
   assert.match(await input.innerText(), /不带批注的草稿/);
-  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
   await page.getByRole('checkbox', { name: '发送批注 3', exact: true }).uncheck();
   await page.getByRole('button', { name: '发送消息', exact: true }).click();
   await page.locator('[data-chat-flow-kind="user"]').filter({ hasText: '不带批注的草稿' }).waitFor();
-  await page.getByRole('button', { name: '0 条注释', exact: true }).click();
+  await page.getByRole('button', { name: '0 条注释', exact: true }).hover();
   assert.equal(await page.getByRole('checkbox', { name: '发送批注 3', exact: true }).isChecked(), false);
   const ordinaryMessages = JSON.parse(await readFile(capturePath, 'utf8'));
   assert.ok(ordinaryMessages.some(m => m.content?.some(b => b.type === 'text' && b.text === '不带批注的草稿')));
@@ -343,7 +350,7 @@ try {
   assert.equal(await page.locator('[data-dca-marker]').count(), 0, 'Editor delete must remove the source marker');
   await select('这是另一个会话'); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
   await page.locator('.dca-annotations').getByRole('button', { name: '删除批注 2', exact: true }).click();
   await page.locator('[data-dca-marker]').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('[data-dca-marker]').count(), 0, 'Popup delete must remove its source marker');

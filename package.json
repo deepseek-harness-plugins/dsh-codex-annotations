@@ -1,6 +1,6 @@
 {
   "name": "@deepseekharness-plugin/dsh-codex-annotations",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Codex 风格的原文批注：选区菜单、编号锚点、可选评论和原生引用发送",
   "type": "module",
   "license": "MIT",

@@ -10,7 +10,7 @@ export const inject = ['slots', 'sessions', 'conversation', 'uiConversation', 'i
 const snapshot = store => useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'edit' ? <path d="m15 4 5 5M4 20l5-1L20 8a3.5 3.5 0 0 0-5-5L4 14l-1 7Z"/> : type === 'delete' ? <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></> : type === 'comment' ? <><path d="M20 15a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h8M7 12h5"/></> : type === 'attach' ? <path d="m8 12 6-6a4 4 0 0 1 6 6L9 23a6 6 0 0 1-8-8L13 3"/> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
 
-function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss, viewport, reveal, avoid }) {
+function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss, viewport, reveal, avoid, hover }) {
   const root = useRef(null); const [position, setPosition] = useState({ left: 12, top: 12 });
   useLayoutEffect(() => {
     const update = () => {
@@ -33,7 +33,19 @@ function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { observer.disconnect(); window.removeEventListener('resize', update); document.removeEventListener('scroll', update, true); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, [anchor, gap, inset, onDismiss, viewport, reveal, avoid]);
-  return createPortal(<div ref={root} data-dca-ui="" className={`dca-float ${className}`} style={position}>{children}</div>, document.body);
+  return createPortal(<div ref={root} data-dca-ui="" className={`dca-float ${className}`} style={position} {...hover}>{children}</div>, document.body);
+}
+
+function useHoverCard() {
+  const [expanded, setExpanded] = useState(false), timer = useRef(null);
+  const close = () => { clearTimeout(timer.current); setExpanded(false); };
+  const hover = {
+    onPointerEnter: () => { clearTimeout(timer.current); setExpanded(true); },
+    // Allow crossing the small gap between the chip and its portal card.
+    onPointerLeave: () => { clearTimeout(timer.current); timer.current = setTimeout(close, 140); }
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return { expanded, open: hover.onPointerEnter, close, hover };
 }
 
 function Details({ note, anchor, close, locate }) {
@@ -64,8 +76,8 @@ function Editor({ note, face, anchor, close, initiallyExpanded = true, viewport,
   </Float>;
 }
 
-function AnnotationList({ notes, face, anchor, close, edit, editable = true }) {
-  return <Float anchor={anchor} gap={4} className="dca-annotations" onDismiss={close}>
+function AnnotationList({ notes, face, anchor, close, edit, editable = true, hover }) {
+  return <Float anchor={anchor} gap={4} className="dca-annotations" onDismiss={close} hover={hover}>
     {notes.map(note => <div className={`dca-annotation ${note.selected === false && note.status !== 'sent' ? 'dca-muted' : ''}`} key={note.id}>
       {editable ? <label className="dca-item-number"><input type="checkbox" aria-label={`发送批注 ${note.number}`} checked={note.selected} onChange={e => face.edit(note.id, { selected: e.target.checked })}/><span>{note.number}.</span></label> : <span className="dca-item-number">{note.number}.</span>}
       <div className="dca-item-body"><span className="dca-item-label">所选文本：</span>
@@ -163,14 +175,14 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
 
 function Dock({ dca: face }) {
   const view = snapshot(face.store), state = snapshot(face.input.state), notice = snapshot(face.notice);
-  const [expanded, setExpanded] = useState(false), [editing, setEditing] = useState(null);
+  const popup = useHoverCard(), [editing, setEditing] = useState(null);
   const trigger = useRef(null);
   const pending = view.annotations.filter(a => a.status === 'pending');
   const attached = state.occurrences.some(o => o.source === 'dsh-codex-annotations' && o.ref === view.ref);
-  useEffect(() => { const open = e => { if (e.detail === face.sessionId) setExpanded(true); }; window.addEventListener('dca:open-list', open); return () => window.removeEventListener('dca:open-list', open); }, [face]);
+  useEffect(() => { const open = e => { if (e.detail === face.sessionId) popup.open(); }; window.addEventListener('dca:open-list', open); return () => window.removeEventListener('dca:open-list', open); }, [face]);
   if (!pending.length && !notice) return null;
   const edit = (note, event) => {
-    setExpanded(false);
+    popup.close();
     const mounted = [...document.querySelectorAll('[data-dca-node-key]')].some(el => el.dataset.dcaSession === face.sessionId && el.dataset.dcaNodeKey === note.nodeKey);
     if (mounted) window.dispatchEvent(new CustomEvent('dca:edit', { detail: { sessionId: face.sessionId, note } }));
     else setEditing({ id: note.id, element: trigger.current });
@@ -179,11 +191,12 @@ function Dock({ dca: face }) {
   const count = pending.filter(a => a.selected).length;
   return <div className="dca-dock" data-dca-ui="" data-dca-dock="">
     {notice && <div role="alert" className="dca-notice"><span>{notice}</span><button aria-label="关闭提示" onClick={face.dismiss}>×</button></div>}
-    {!!pending.length && <div className={attached ? 'dca-batch-chip' : 'dca-batch-chip dca-detached'} data-dca-anchor="">
-      <button ref={trigger} className="dca-batch-open" aria-label={count + ' 条注释'} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{icon('comment')}<span><strong>{count}</strong> 条<span className="dca-chip-label">注释</span></span></button>
+    {!!pending.length && <div className={attached ? 'dca-batch-chip' : 'dca-batch-chip dca-detached'} data-dca-anchor="" {...popup.hover}>
+      <button ref={trigger} className="dca-batch-open" aria-label={count + ' 条注释'} aria-expanded={popup.expanded} onFocus={popup.open}
+        onClick={() => { popup.close(); face.locate(pending.find(a => a.selected) ?? pending[0]); }}>{icon('comment')}<span><strong>{count}</strong> 条<span className="dca-chip-label">注释</span></span></button>
       <button className="dca-chip-remove" aria-label={attached ? '取消附加批注' : '附加批注'} onClick={() => face.run(() => attached ? face.detach() : face.ensure(true))}>{icon(attached ? 'close' : 'attach')}</button>
     </div>}
-    {expanded && !!pending.length && <AnnotationList notes={pending} face={face} anchor={() => trigger.current?.closest('.dca-batch-chip').getBoundingClientRect()} close={() => setExpanded(false)} edit={edit}/>}
+    {popup.expanded && !!pending.length && <AnnotationList notes={pending} face={face} anchor={() => trigger.current?.closest('.dca-batch-chip').getBoundingClientRect()} close={popup.close} hover={popup.hover} edit={edit}/>}
     {edited && <Editor key={edited.id} note={edited} face={face} anchor={() => editing.element.getBoundingClientRect()} close={() => setEditing(null)}/>}
   </div>;
 }
@@ -193,7 +206,7 @@ function Attachments({ inner: Inner, dca: face, ...props }) {
 }
 
 function User({ inner: Inner, dca: face, ...props }) {
-  const [detail, setDetail] = useState(null);
+  const popup = useHoverCard(), trigger = useRef(null);
   const payloads = [];
   const content = (props.node.data.content ?? []).map(block => {
     if (block.type !== 'text') return block;
@@ -203,8 +216,9 @@ function User({ inner: Inner, dca: face, ...props }) {
   if (!payloads.length) return <Inner {...props}/>;
   const notes = payloads.flatMap(p => p.annotations).map(note => ({ ...note, status: 'sent' }));
   return <div><Inner {...props} node={{ ...props.node, data: { ...props.node.data, content } }}/>
-    <div className="dca-sent-pills" data-dca-ui=""><div className="dca-batch-chip" data-dca-anchor=""><button className="dca-batch-open" aria-label={`${notes.length} 条已发送注释`} onClick={e => setDetail(detail ? null : { element: e.currentTarget })}>{icon('comment')}<span><strong>{notes.length}</strong> 条<span className="dca-chip-label">注释</span></span></button></div></div>
-    {detail && <AnnotationList notes={notes} face={face} editable={false} anchor={() => detail.element.closest('.dca-batch-chip').getBoundingClientRect()} close={() => setDetail(null)}/>}
+    <div className="dca-sent-pills" data-dca-ui=""><div className="dca-batch-chip" data-dca-anchor="" {...popup.hover}><button ref={trigger} className="dca-batch-open" aria-label={`${notes.length} 条已发送注释`} aria-expanded={popup.expanded} onFocus={popup.open}
+      onClick={() => { popup.close(); face.locate(notes[0]); }}>{icon('comment')}<span><strong>{notes.length}</strong> 条<span className="dca-chip-label">注释</span></span></button></div></div>
+    {popup.expanded && <AnnotationList notes={notes} face={face} editable={false} anchor={() => trigger.current.closest('.dca-batch-chip').getBoundingClientRect()} close={popup.close} hover={popup.hover}/>}
   </div>;
 }
 

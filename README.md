@@ -14,26 +14,26 @@
 2. 点击紧凑框的「添加可选评论…」进入编辑。写评论，或直接按 Enter 保留空评论。Shift+Enter 换行；Escape/点击外部收起编辑器。点击「保存」或按 Enter 才保存；「取消」、Escape、点击外部保留原有评论。
 3. 继续选择其他文字。每条批注保留独立编号；点击蓝色编号，或在输入框的详情卡中点铅笔，可重新编辑。
 4. 在原生输入框写本轮要求，按 Enter 或点击原生发送按钮。也可以只发送批注。
-5. 已发送消息下面的批注胶囊可查看完整原文、评论，并「回到原文」。
+5. 已发送消息下面的批注胶囊，悬停可查看完整原文与评论，点击直接回到原文。
 
-「更多详情」显示完整选区。输入框内用「N 条注释」胶囊汇总；点击显示完整原文与评论，右侧提供铅笔和删除。点击条目编号可切换是否随消息发送，胶囊的 × 取消附加。未勾选的批注保留到后续消息，取消附加后正常输入不会自行重新附加。
+「更多详情」显示完整选区。输入框内用「N 条注释」胶囊汇总；悬停或键盘聚焦显示完整原文与评论，右侧提供铅笔和删除。点击胶囊直接跳到第一条勾选批注（没有勾选时定位第一条保留的批注），收起详情；多条批注时，悬停后点击具体原文可选择跳转目标。点击条目编号可切换是否随消息发送，胶囊的 × 取消附加。未勾选的批注保留到后续消息，取消附加后正常输入不会自行重新附加。
 
 点击详情卡中的所选文本，会收起浮层并跳转、高亮对应原文；定位具体选区，避开顶部栏和底部输入框。点击铅笔才打开编辑器，评论框与蓝色编号相互避让，长评论展开时重新计算所需空间。
 
 ## 安装
 
-适用于 **DSH Desktop / Web 0.2.0-rc.2**。当前版本 0.2.2，尚未发布到 npm。仓库包含构建产物，可直接打包本地安装：
+适用于 **DSH Desktop / Web 0.2.0-rc.2**。当前版本 0.2.3，尚未发布到 npm。仓库包含构建产物，可直接打包本地安装：
 
 ```sh
 cd /path/to/dsh-codex-annotations
 npm pack
-dsh plugin --profile desktop add /path/to/deepseekharness-plugin-dsh-codex-annotations-0.2.2.tgz
+dsh plugin --profile desktop add /path/to/deepseekharness-plugin-dsh-codex-annotations-0.2.3.tgz
 ```
 
 使用 Web 时把 `desktop` 换成 `web`。如果系统没有 `dsh` 命令，macOS 应用内的入口为：
 
 ```sh
-'/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh' plugin --profile desktop add /absolute/path/to/deepseekharness-plugin-dsh-codex-annotations-0.2.2.tgz
+'/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh' plugin --profile desktop add /absolute/path/to/deepseekharness-plugin-dsh-codex-annotations-0.2.3.tgz
 ```
 
 安装后重新打开 DSH。首次试用时建议暂时停用其他选区/批注插件，避免多个菜单同时出现。CLI/TUI 不提供这些图形交互。
