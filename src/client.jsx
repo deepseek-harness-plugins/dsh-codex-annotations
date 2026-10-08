@@ -2,12 +2,12 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useSyncExternalSto
 import { createPortal } from 'react-dom';
 import { createRuntime } from './runtime.js';
 import { decodeText } from './core.js';
-import { capture, restoreRange, selectionEndRect } from './ranges.js';
+import { capture, restoreRange } from './ranges.js';
 import css from './styles.css';
 
 export const inject = ['slots', 'sessions', 'conversation', 'uiConversation', 'inputTriggers'];
 const snapshot = store => useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'chevron' ? <path d="m8 10 4 4 4-4"/> : type === 'comment' ? <path d="M20 11a8 8 0 0 1-8 8H5l-3 3V11a9 9 0 0 1 18 0Z"/> : type === 'attach' ? <path d="m8 12 6-6a4 4 0 0 1 6 6L9 23a6 6 0 0 1-8-8L13 3"/> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
+const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'edit' ? <path d="m15 4 5 5M4 20l5-1L20 8a3.5 3.5 0 0 0-5-5L4 14l-1 7Z"/> : type === 'delete' ? <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></> : type === 'comment' ? <><path d="M20 15a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h8M7 12h5"/></> : type === 'attach' ? <path d="m8 12 6-6a4 4 0 0 1 6 6L9 23a6 6 0 0 1-8-8L13 3"/> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
 
 function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss }) {
   const root = useRef(null); const [position, setPosition] = useState({ left: 12, top: 12 });
@@ -23,7 +23,7 @@ function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss
     };
     update(); const observer = new ResizeObserver(update); observer.observe(root.current);
     window.addEventListener('resize', update); document.addEventListener('scroll', update, true);
-    const outside = e => { if (!root.current?.contains(e.target) && !e.target.closest('[data-dca-marker]')) onDismiss?.(); };
+    const outside = e => { if (!root.current?.contains(e.target) && !e.target.closest('[data-dca-marker],[data-dca-anchor]')) onDismiss?.(); };
     const escape = e => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss?.(); } };
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { observer.disconnect(); window.removeEventListener('resize', update); document.removeEventListener('scroll', update, true); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
@@ -40,15 +40,35 @@ function Details({ note, anchor, close, locate }) {
   </Float>;
 }
 
-function Editor({ note, face, anchor, close }) {
+function Editor({ note, face, anchor, close, initiallyExpanded = true }) {
   const input = useRef(null);
+  const [expanded, setExpanded] = useState(initiallyExpanded), [draft, setDraft] = useState(note.comment);
   useEffect(() => { input.current?.focus({ preventScroll: true }); }, []);
-  useLayoutEffect(() => { if (input.current) { input.current.style.height = 'auto'; input.current.style.height = `${input.current.scrollHeight}px`; } }, [note.comment]);
-  return <Float anchor={anchor} gap={31} inset={-8} className="dca-editor" onDismiss={close}>
-    <textarea ref={input} aria-label={`批注 ${note.number} 的可选评论`} placeholder="添加可选评论…" rows={1} value={note.comment}
-      onChange={e => face.edit(note.id, { comment: e.target.value })}
-      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); e.stopPropagation(); close(); } }} />
-    <button className="dca-icon dca-confirm" aria-label="完成批注" onClick={close}>{icon('check')}</button>
+  useLayoutEffect(() => { if (input.current) { input.current.style.height = 'auto'; input.current.style.height = `${Math.max(22, input.current.scrollHeight)}px`; } }, [draft, expanded]);
+  const save = () => { if (draft === note.comment || face.edit(note.id, { comment: draft }) !== false) close(); };
+  return <Float anchor={anchor} gap={7} inset={90} className={`dca-editor ${expanded ? 'dca-editor-expanded' : 'dca-editor-compact'}`} onDismiss={close}>
+    <textarea ref={input} aria-label={`批注 ${note.number} 的可选评论`} placeholder="添加可选评论…" rows={1} value={draft}
+        onPointerDown={() => setExpanded(true)} onChange={e => { setExpanded(true); setDraft(e.target.value); }}
+        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); e.stopPropagation(); save(); } }} />
+    {expanded && <div className="dca-editor-actions">
+        <button className="dca-icon dca-delete" aria-label={`删除批注 ${note.number}`} onClick={() => { if (face.remove(note.id) !== false) close(); }}>{icon('delete')}</button>
+        <span className="dca-editor-spacer"/>
+        <button className="dca-cancel" onClick={close}>取消</button>
+        <button className="dca-save" onClick={save}>保存</button>
+      </div>}
+  </Float>;
+}
+
+function AnnotationList({ notes, face, anchor, close, edit, editable = true }) {
+  return <Float anchor={anchor} gap={4} className="dca-annotations" onDismiss={close}>
+    {notes.map(note => <div className={`dca-annotation ${note.selected === false && note.status !== 'sent' ? 'dca-muted' : ''}`} key={note.id}>
+      {editable ? <label className="dca-item-number"><input type="checkbox" aria-label={`发送批注 ${note.number}`} checked={note.selected} onChange={e => face.edit(note.id, { selected: e.target.checked })}/><span>{note.number}.</span></label> : <span className="dca-item-number">{note.number}.</span>}
+      <div className="dca-item-body"><span className="dca-item-label">所选文本：</span>
+        <button className="dca-quote" onClick={() => { face.locate(note); close(); }}>{note.quote}</button>
+        <span className="dca-item-label dca-comment-label">用户评论：</span><p className="dca-comment">{note.comment || '未添加评论'}</p>
+      </div>
+      {editable && <div className="dca-item-actions"><button className="dca-icon" aria-label={`编辑批注 ${note.number}`} onClick={e => edit(note, e)}>{icon('edit')}</button><button className="dca-icon" aria-label={`删除批注 ${note.number}`} onClick={() => face.remove(note.id)}>{icon('delete')}</button></div>}
+    </div>)}
   </Float>;
 }
 
@@ -74,13 +94,14 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
         const bounds = root.current.getBoundingClientRect(); const used = [];
         setLayout(notes.flatMap(note => {
           const range = restoreRange(source.current, note); if (!range) return [];
-          const end = selectionEndRect(range);
           // Nested inline/code elements can repeat the same rectangle. Painting
           // it twice changes the selection color even though the text is identical.
           const unique = new Map([...range.getClientRects()].filter(r => r.width > 0 && r.height > 0).map(r => [JSON.stringify([r.left, r.top, r.width, r.height]), r]));
           const rects = [...unique.values()].map(r => ({ left: r.left - bounds.left, top: r.top - bounds.top, width: r.width, height: r.height }));
           if (!rects.length) return [];
-          let left = Math.max(0, Math.min(end.right - bounds.left - 13.5, bounds.width - 27)), top = Math.min(...rects.map(r => r.top)) - 27;
+          const firstTop = Math.min(...rects.map(r => r.top));
+          const firstRight = Math.max(...rects.filter(r => Math.abs(r.top - firstTop) < 2).map(r => r.left + r.width));
+          let left = Math.max(0, Math.min(firstRight - 27, bounds.width - 27)), top = firstTop - 29;
           const initialLeft = left;
           while (used.some(p => Math.abs(p.top - top) < 27 && Math.abs(p.left - left) < 29)) {
             left -= 31;
@@ -122,42 +143,43 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
       </React.Fragment>)}
     </div>
     {selection && !open && <Float anchor={anchor} className="dca-menu" onDismiss={close}>
-      <button onClick={() => { const note = face.add(selection.selector); if (note) { setOpen({ kind: 'edit', note }); window.getSelection()?.removeAllRanges(); } }}>添加到对话</button>
+      <button onClick={() => { const note = face.add(selection.selector); if (note) { setOpen({ kind: 'edit', note, compact: true }); window.getSelection()?.removeAllRanges(); } }}>添加到对话</button>
       <button onClick={() => setOpen({ kind: 'details', note: selection.selector })}>更多详情</button>
     </Float>}
-    {open?.kind === 'edit' && active && <Editor note={active} face={face} anchor={anchor} close={close}/>}
+    {open?.kind === 'edit' && active && <Editor key={active.id} note={active} face={face} anchor={anchor} close={close} initiallyExpanded={!open.compact}/>}
     {open?.kind === 'details' && active && <Details note={active} anchor={anchor} close={close}/>}
   </div>;
 }
 
 function Dock({ dca: face }) {
   const view = snapshot(face.store), state = snapshot(face.input.state), notice = snapshot(face.notice);
-  const [expanded, setExpanded] = useState(false);
-  const [editing, setEditing] = useState(null);
+  const [expanded, setExpanded] = useState(false), [editing, setEditing] = useState(null);
+  const trigger = useRef(null);
   const pending = view.annotations.filter(a => a.status === 'pending');
   const attached = state.occurrences.some(o => o.source === 'dsh-codex-annotations' && o.ref === view.ref);
   useEffect(() => { const open = e => { if (e.detail === face.sessionId) setExpanded(true); }; window.addEventListener('dca:open-list', open); return () => window.removeEventListener('dca:open-list', open); }, [face]);
   if (!pending.length && !notice) return null;
-  const locate = (note, event) => {
+  const edit = (note, event) => {
+    setExpanded(false);
     const mounted = [...document.querySelectorAll('[data-dca-node-key]')].some(el => el.dataset.dcaSession === face.sessionId && el.dataset.dcaNodeKey === note.nodeKey);
-    if (!mounted) { face.report('这段原文暂未加载，可先编辑评论；定位原文前请向上加载历史消息。'); setEditing({ id: note.id, element: event.currentTarget }); }
-    else { window.dispatchEvent(new CustomEvent('dca:edit', { detail: { sessionId: face.sessionId, note } })); }
+    if (mounted) window.dispatchEvent(new CustomEvent('dca:edit', { detail: { sessionId: face.sessionId, note } }));
+    else setEditing({ id: note.id, element: trigger.current });
   };
   const edited = view.annotations.find(a => a.id === editing?.id);
+  const count = pending.filter(a => a.selected).length;
   return <div className="dca-dock" data-dca-ui="" data-dca-dock="">
     {notice && <div role="alert" className="dca-notice"><span>{notice}</span><button aria-label="关闭提示" onClick={face.dismiss}>×</button></div>}
-    {!!pending.length && <><div className="dca-summary">
-      <button className="dca-toggle" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} aria-label={`${pending.filter(a => a.selected).length} 条批注 ${expanded ? '⌃' : '⌄'}`} title={attached ? '批注已附加，随下一条消息发送' : '批注已保存，尚未附加'}>{icon('comment')}<span>批注 {pending.filter(a => a.selected).length}</span><span className={expanded ? 'dca-chevron dca-expanded' : 'dca-chevron'}>{icon('chevron')}</span></button>
-      {pending.map(note => <button key={note.id} className={`dca-preview ${note.selected ? '' : 'dca-muted'}`} onClick={e => locate(note, e)} title={`${note.quote}${note.comment ? `\n${note.comment}` : ''}`}><span className="dca-number">{note.number}</span><span>{note.comment || note.quote}</span></button>)}
-      <button className="dca-icon dca-attach" aria-label={attached ? '取消附加批注' : '附加批注'} title={attached ? '取消附加批注' : '附加批注'} onClick={() => face.run(() => attached ? face.detach() : face.ensure(true))}>{icon(attached ? 'close' : 'attach')}</button>
-    </div>
-    {expanded && <div className="dca-list">{pending.map(note => <div className="dca-row" key={note.id}>
-      <input type="checkbox" aria-label={`发送批注 ${note.number}`} checked={note.selected} onChange={e => face.edit(note.id, { selected: e.target.checked })}/>
-      <span className="dca-number">{note.number}</span><button className="dca-row-text" title={note.quote} onClick={e => locate(note, e)}>{note.comment || note.quote}</button>
-      <button aria-label={`删除批注 ${note.number}`} onClick={() => face.remove(note.id)}>×</button>
-    </div>)}</div>}</>}
-    {edited && <Editor note={edited} face={face} anchor={() => editing.element.getBoundingClientRect()} close={() => setEditing(null)}/>}
+    {!!pending.length && <div className={attached ? 'dca-batch-chip' : 'dca-batch-chip dca-detached'} data-dca-anchor="">
+      <button ref={trigger} className="dca-batch-open" aria-label={count + ' 条注释'} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{icon('comment')}<span><strong>{count}</strong> 条<span className="dca-chip-label">注释</span></span></button>
+      <button className="dca-chip-remove" aria-label={attached ? '取消附加批注' : '附加批注'} onClick={() => face.run(() => attached ? face.detach() : face.ensure(true))}>{icon(attached ? 'close' : 'attach')}</button>
+    </div>}
+    {expanded && !!pending.length && <AnnotationList notes={pending} face={face} anchor={() => trigger.current?.closest('.dca-batch-chip').getBoundingClientRect()} close={() => setExpanded(false)} edit={edit}/>}
+    {edited && <Editor key={edited.id} note={edited} face={face} anchor={() => editing.element.getBoundingClientRect()} close={() => setEditing(null)}/>}
   </div>;
+}
+
+function Attachments({ inner: Inner, dca: face, ...props }) {
+  return <><Inner {...props}/>{face && <Dock dca={face}/>}</>;
 }
 
 function User({ inner: Inner, dca: face, ...props }) {
@@ -169,16 +191,10 @@ function User({ inner: Inner, dca: face, ...props }) {
     return decoded.payloads.length ? { ...block, text: decoded.text } : block;
   });
   if (!payloads.length) return <Inner {...props}/>;
-  const notes = payloads.flatMap(p => p.annotations);
+  const notes = payloads.flatMap(p => p.annotations).map(note => ({ ...note, status: 'sent' }));
   return <div><Inner {...props} node={{ ...props.node, data: { ...props.node.data, content } }}/>
-    <div className="dca-sent-pills" data-dca-ui="">{notes.map(note => <button className="dca-pill" key={note.id} title={`${note.quote}\n${note.comment}`} onClick={e => {
-      setDetail({ note: { ...note, status: 'sent' }, element: e.currentTarget });
-    }}><span className="dca-number">{note.number}</span><span>{note.comment || '引用原文'}</span></button>)}</div>
-    {detail && <Details note={detail.note} anchor={() => detail.element.getBoundingClientRect()} close={() => setDetail(null)} locate={() => {
-      const mounted = [...document.querySelectorAll('[data-dca-node-key]')].some(el => el.dataset.dcaSession === face.sessionId && el.dataset.dcaNodeKey === detail.note.nodeKey);
-      if (!mounted) face.report('原文暂未加载，请先向上加载历史消息；引用内容可在这里完整查看。');
-      else { face.locate(detail.note); setDetail(null); }
-    }}/>}
+    <div className="dca-sent-pills" data-dca-ui=""><div className="dca-batch-chip" data-dca-anchor=""><button className="dca-batch-open" aria-label={`${notes.length} 条已发送注释`} onClick={e => setDetail(detail ? null : { element: e.currentTarget })}>{icon('comment')}<span><strong>{notes.length}</strong> 条<span className="dca-chip-label">注释</span></span></button></div></div>
+    {detail && <AnnotationList notes={notes} face={face} editable={false} anchor={() => detail.element.closest('.dca-batch-chip').getBoundingClientRect()} close={() => setDetail(null)}/>}
   </div>;
 }
 
@@ -189,29 +205,27 @@ export function apply(ctx) {
   ctx.effect(() => () => { runtime.dispose(); style.remove(); });
   ctx.effect(() => ctx.inputTriggers.registerSource(runtime.source));
   const decorated = new WeakSet(), registrations = new Map();
+  const names = ['conversation.chat.node', 'conversation.input.attachments'];
   const decorate = () => {
-    const entries = ctx.slots.entries('conversation.chat.node');
+    const entries = names.flatMap(name => ctx.slots.entries(name));
     for (const [entry, release] of registrations) if (!entries.includes(entry)) { registrations.delete(entry); release(); }
-    for (const entry of entries) {
-      const Wrapper = entry.options.key === 'assistant-step' ? Assistant : ['user', 'steering'].includes(entry.options.key) ? User : null;
+    for (const name of names) for (const entry of ctx.slots.entries(name)) {
+      const Wrapper = name === 'conversation.input.attachments' ? Attachments : entry.options.key === 'assistant-step' ? Assistant : ['user', 'steering'].includes(entry.options.key) ? User : null;
       if (!Wrapper || decorated.has(entry.component) || registrations.has(entry)) continue;
       const original = entry.component;
-      function AnnotatedNode(props) { return <Wrapper {...props} dca={runtime.faceFor(props.sessionId)} inner={original}/>; }
+      function AnnotatedNode(props) { return <Wrapper {...props} dca={props.sessionId === undefined ? null : runtime.faceFor(props.sessionId)} inner={original}/>; }
       decorated.add(AnnotatedNode);
       // The renderer caches injection by entry identity. Mutating an already
       // mounted native entry leaves stale props and can abdicate its renderer.
       // A separate priority entry keeps native registration/cache untouched.
       registrations.set(entry, () => {});
-      const release = ctx.slots.register({ name: 'conversation.chat.node', ...entry.options,
+      const release = ctx.slots.register({ name, ...entry.options,
         priority: (entry.options.priority ?? 0) - 1, inject: entry.inject, locale: entry.locale,
         store: entry.store }, AnnotatedNode);
       registrations.set(entry, release);
     }
   };
-  ctx.slots.inject('conversation.chat.node', () => {
-    decorate(); const off = ctx.on('slots/changed', name => { if (name === 'conversation.chat.node') decorate(); });
-    return () => { off(); for (const release of [...registrations.values()].reverse()) release(); registrations.clear(); };
-  });
-  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({ name: 'conversation.input.dock', id: 'dsh-codex-annotations', order: -25,
-    inject: sessionId => ({ dca: runtime.faceFor(sessionId) }) }, Dock));
+  for (const name of names) ctx.slots.inject(name, decorate);
+  const off = ctx.on('slots/changed', name => { if (names.includes(name)) decorate(); });
+  ctx.effect(() => () => { off(); for (const release of [...registrations.values()].reverse()) release(); registrations.clear(); });
 }
