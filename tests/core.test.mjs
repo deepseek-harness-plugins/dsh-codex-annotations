@@ -26,13 +26,35 @@ test('破损和假协议不隐藏普通用户文字', () => {
   for (const text of ['[DSH_ANNOTATIONS_V1:2:fake]\n{}\n[/DSH_ANNOTATIONS_V1]', '普通文本 [DSH_ANNOTATIONS_V1:1:x]', '[DSH_ANNOTATIONS_V1:99999:x]\n{}'])
     assert.deepEqual(decodeText(text), { text, payloads: [] });
 });
-test('刷新恢复待发送状态和稳定编号，删除不复用旧编号', () => {
+test('刷新后复用最小空缺编号，保留其他批注的编号和评论', () => {
   const db = storage(), s = new AnnotationStore(db, 'a');
-  const first = s.add(selector); s.edit(first.id, { comment: ' 空格与\n换行 ' });
+  const first = s.add(selector), second = s.add(selector), third = s.add(selector);
+  s.edit(first.id, { comment: ' 空格与\n换行 ' });
+  s.remove(second.id);
+  // Existing v1 profiles may still contain the previous monotonic counter.
+  db.setItem(s.key, JSON.stringify({ ...s.getSnapshot(), nextNumber: 99 }));
   const restored = new AnnotationStore(db, 'a');
   assert.equal(restored.selected()[0].comment, ' 空格与\n换行 ');
-  restored.remove(first.id); assert.equal(restored.add(selector).number, 2);
+  const replacement = restored.add(selector);
+  assert.equal(replacement.number, 2);
+  assert.notEqual(replacement.id, second.id);
+  assert.deepEqual(restored.getSnapshot().annotations.map(a => [a.id, a.number]), [[first.id, 1], [third.id, 3], [replacement.id, 2]]);
+  restored.remove(first.id);
+  assert.equal(restored.add(selector).number, 1);
   assert.equal(new AnnotationStore(db, 'b').getSnapshot().annotations.length, 0);
+});
+test('迟到的发送确认不会清除复用编号的新批注，已发送编号不复用', () => {
+  const s = new AnnotationStore(storage(), 'a'), first = s.add(selector);
+  const old = s.prepare(s.getSnapshot().ref);
+  s.remove(first.id);
+  const replacement = s.add(selector);
+  assert.equal(replacement.number, first.number);
+  s.acknowledge(old);
+  assert.equal(s.selected()[0].id, replacement.id);
+  const current = s.prepare(s.getSnapshot().ref);
+  s.acknowledge(current);
+  assert.equal(s.add(selector).number, 2);
+  assert.equal(s.getSnapshot().annotations.find(a => a.id === replacement.id).number, 1);
 });
 test('序列化及失败不清空批注，只有已接受的原始用户消息才确认', () => {
   const s = new AnnotationStore(storage(), 'a'); s.add(selector);

@@ -40,7 +40,7 @@ export function decodeText(text) {
 }
 
 function empty(sessionId) {
-  return { version: 1, sessionId, ref: uid(), nextNumber: 1, annotations: [], flights: {} };
+  return { version: 1, sessionId, ref: uid(), annotations: [], flights: {} };
 }
 
 /** Persist before publishing; a quota/error never silently discards a draft. */
@@ -77,7 +77,10 @@ export class AnnotationStore {
   add(selector) {
     if (!selector.quote) throw new Error('请先选择原文。');
     return this.change(state => {
-      const note = { ...selector, id: uid(), number: state.nextNumber++, comment: '',
+      const used = new Set(state.annotations.map(a => a.number));
+      let number = 1;
+      while (used.has(number)) number++;
+      const note = { ...selector, id: uid(), number, comment: '',
         selected: true, status: 'pending', revision: 1 };
       state.annotations.push(note);
       return note;

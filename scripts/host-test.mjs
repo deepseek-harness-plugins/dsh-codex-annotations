@@ -371,7 +371,8 @@ try {
   await select('这是另一个会话'); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
-  await page.locator('.dca-annotations').getByRole('button', { name: '删除批注 2', exact: true }).click();
+  await page.getByRole('button', { name: '批注 1，待发送', exact: true }).waitFor();
+  await page.locator('.dca-annotations').getByRole('button', { name: '删除批注 1', exact: true }).click();
   await page.locator('[data-dca-marker]').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('[data-dca-marker]').count(), 0, 'Popup delete must remove its source marker');
   assert.equal(await page.locator('[data-dca-dock]').count(), 0, 'Deleting the last annotation must remove the chip');
