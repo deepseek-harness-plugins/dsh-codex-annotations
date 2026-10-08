@@ -3,31 +3,36 @@ import { createPortal } from 'react-dom';
 import { createRuntime } from './runtime.js';
 import { decodeText } from './core.js';
 import { capture, restoreRange } from './ranges.js';
+import { readingViewport, revealQuote } from './navigation.js';
 import css from './styles.css';
 
 export const inject = ['slots', 'sessions', 'conversation', 'uiConversation', 'inputTriggers'];
 const snapshot = store => useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'edit' ? <path d="m15 4 5 5M4 20l5-1L20 8a3.5 3.5 0 0 0-5-5L4 14l-1 7Z"/> : type === 'delete' ? <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></> : type === 'comment' ? <><path d="M20 15a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h8M7 12h5"/></> : type === 'attach' ? <path d="m8 12 6-6a4 4 0 0 1 6 6L9 23a6 6 0 0 1-8-8L13 3"/> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
 
-function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss }) {
+function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss, viewport, reveal, avoid }) {
   const root = useRef(null); const [position, setPosition] = useState({ left: 12, top: 12 });
   useLayoutEffect(() => {
     const update = () => {
       const rect = anchor(), el = root.current;
       if (!rect || !el) { onDismiss?.(); return; }
-      const vw = window.innerWidth, vh = window.innerHeight;
-      const left = Math.max(12, Math.min(rect.left + inset, vw - el.offsetWidth - 12));
+      const area = viewport?.() ?? { left: 12, right: window.innerWidth - 12, top: 12, bottom: window.innerHeight - 12 };
+      const left = Math.max(area.left, Math.min(rect.left + inset, area.right - el.offsetWidth));
       let top = rect.top - el.offsetHeight - gap;
-      if (top < 12) top = rect.bottom + gap;
-      setPosition({ left, top: Math.max(12, Math.min(top, vh - el.offsetHeight - 12)) });
+      const excluded = avoid?.();
+      if (excluded && excluded.right > left && excluded.left < left + el.offsetWidth
+        && excluded.bottom > top && excluded.top < top + el.offsetHeight) top = excluded.top - el.offsetHeight - gap;
+      if (top < area.top) top = rect.bottom + gap;
+      setPosition({ left, top: Math.max(area.top, Math.min(top, area.bottom - el.offsetHeight)) });
     };
-    update(); const observer = new ResizeObserver(update); observer.observe(root.current);
+    const resized = () => { reveal?.(root.current.offsetHeight + gap + (avoid?.()?.height ?? 0) + 2); update(); };
+    resized(); const observer = new ResizeObserver(resized); observer.observe(root.current);
     window.addEventListener('resize', update); document.addEventListener('scroll', update, true);
     const outside = e => { if (!root.current?.contains(e.target) && !e.target.closest('[data-dca-marker],[data-dca-anchor]')) onDismiss?.(); };
     const escape = e => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss?.(); } };
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { observer.disconnect(); window.removeEventListener('resize', update); document.removeEventListener('scroll', update, true); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-  }, [anchor, gap, inset, onDismiss]);
+  }, [anchor, gap, inset, onDismiss, viewport, reveal, avoid]);
   return createPortal(<div ref={root} data-dca-ui="" className={`dca-float ${className}`} style={position}>{children}</div>, document.body);
 }
 
@@ -40,13 +45,13 @@ function Details({ note, anchor, close, locate }) {
   </Float>;
 }
 
-function Editor({ note, face, anchor, close, initiallyExpanded = true }) {
+function Editor({ note, face, anchor, close, initiallyExpanded = true, viewport, reveal, avoid }) {
   const input = useRef(null);
   const [expanded, setExpanded] = useState(initiallyExpanded), [draft, setDraft] = useState(note.comment);
   useEffect(() => { input.current?.focus({ preventScroll: true }); }, []);
   useLayoutEffect(() => { if (input.current) { input.current.style.height = 'auto'; input.current.style.height = `${Math.max(22, input.current.scrollHeight)}px`; } }, [draft, expanded]);
   const save = () => { if (draft === note.comment || face.edit(note.id, { comment: draft }) !== false) close(); };
-  return <Float anchor={anchor} gap={7} inset={90} className={`dca-editor ${expanded ? 'dca-editor-expanded' : 'dca-editor-compact'}`} onDismiss={close}>
+  return <Float anchor={anchor} gap={7} inset={90} className={`dca-editor ${expanded ? 'dca-editor-expanded' : 'dca-editor-compact'}`} onDismiss={close} viewport={viewport} reveal={reveal} avoid={avoid}>
     <textarea ref={input} aria-label={`批注 ${note.number} 的可选评论`} placeholder="添加可选评论…" rows={1} value={draft}
         onPointerDown={() => setExpanded(true)} onChange={e => { setExpanded(true); setDraft(e.target.value); }}
         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); e.stopPropagation(); save(); } }} />
@@ -64,7 +69,7 @@ function AnnotationList({ notes, face, anchor, close, edit, editable = true }) {
     {notes.map(note => <div className={`dca-annotation ${note.selected === false && note.status !== 'sent' ? 'dca-muted' : ''}`} key={note.id}>
       {editable ? <label className="dca-item-number"><input type="checkbox" aria-label={`发送批注 ${note.number}`} checked={note.selected} onChange={e => face.edit(note.id, { selected: e.target.checked })}/><span>{note.number}.</span></label> : <span className="dca-item-number">{note.number}.</span>}
       <div className="dca-item-body"><span className="dca-item-label">所选文本：</span>
-        <button className="dca-quote" onClick={() => { face.locate(note); close(); }}>{note.quote}</button>
+        <button className="dca-quote" onClick={() => { close(); face.locate(note); }}>{note.quote}</button>
         <span className="dca-item-label dca-comment-label">用户评论：</span><p className="dca-comment">{note.comment || '未添加评论'}</p>
       </div>
       {editable && <div className="dca-item-actions"><button className="dca-icon" aria-label={`编辑批注 ${note.number}`} onClick={e => edit(note, e)}>{icon('edit')}</button><button className="dca-icon" aria-label={`删除批注 ${note.number}`} onClick={() => face.remove(note.id)}>{icon('delete')}</button></div>}
@@ -123,8 +128,11 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
       if (event.detail.sessionId !== face.sessionId || event.detail.note.nodeKey !== nodeKey) return;
       const note = event.detail.note, range = restoreRange(source.current, note);
       if (!range) { face.report('原文已变化，无法准确定位；批注原文仍保留。'); return; }
-      root.current.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-      setSelection(null); setOpen({ kind: event.type === 'dca:edit' && note.status !== 'sent' ? 'edit' : 'details', note }); root.current.classList.add('dca-flash');
+      const editing = event.type === 'dca:edit' && note.status !== 'sent';
+      setSelection(null); setOpen(editing ? { kind: 'edit', note, reveal: true } : null);
+      revealQuote(root.current, range, { spaceAbove: editing ? 100 : 36,
+        behavior: editing || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      root.current.classList.add('dca-flash');
       clearTimeout(timer); timer = setTimeout(() => root.current?.classList.remove('dca-flash'), 1200);
     };
     window.addEventListener('dca:locate', locate); window.addEventListener('dca:edit', locate);
@@ -146,7 +154,9 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
       <button onClick={() => { const note = face.add(selection.selector); if (note) { setOpen({ kind: 'edit', note, compact: true }); window.getSelection()?.removeAllRanges(); } }}>添加到对话</button>
       <button onClick={() => setOpen({ kind: 'details', note: selection.selector })}>更多详情</button>
     </Float>}
-    {open?.kind === 'edit' && active && <Editor key={active.id} note={active} face={face} anchor={anchor} close={close} initiallyExpanded={!open.compact}/>}
+    {open?.kind === 'edit' && active && <Editor key={active.id} note={active} face={face} anchor={anchor} close={close} initiallyExpanded={!open.compact}
+      avoid={() => root.current.querySelector(`[data-dca-marker="${CSS.escape(active.id)}"]`)?.getBoundingClientRect()}
+      viewport={() => readingViewport(root.current)} reveal={open.reveal ? height => revealQuote(root.current, restoreRange(source.current, active), { spaceAbove: height, center: false }) : undefined}/>}
     {open?.kind === 'details' && active && <Details note={active} anchor={anchor} close={close}/>}
   </div>;
 }

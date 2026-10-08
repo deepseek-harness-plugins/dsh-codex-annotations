@@ -28,7 +28,9 @@ await writeFile(patch, JSON.stringify([
   { insert: [{ id: 'dca-fixture', name: pathToFileURL(join(project, 'tests/mock-model.mjs')).href }] }
 ]));
 const referenceQuote = '失的是助手回答正文，用量数字还在。这和刚才启用插件时出现的显示问题一致；我先检查你现在的窗';
-const fixtureText = '这个插件会把选中的原文和你的评论随下一条消息一起发给模型。你可以连续添加多条批注，并随时返回原文查看。\n\n```js\nconst greeting = "你好🙂";\nconsole.log(greeting);\n```\n\n| 功能 | 状态 |\n| --- | --- |\n| 空评论 | 支持 |\n| 多条批注 | 支持 |\n\n截图里消失的是助手回答正文，用量数字还在。这和刚才启用插件时出现的显示问题一致；我先检查你现在的窗口，再定位插件为何会把正文隐藏。';
+const fixtureText = '这个插件会把选中的原文和你的评论随下一条消息一起发给模型。你可以连续添加多条批注，并随时返回原文查看。\n\n```js\nconst greeting = "你好🙂";\nconsole.log(greeting);\n```\n\n| 功能 | 状态 |\n| --- | --- |\n| 空评论 | 支持 |\n| 多条批注 | 支持 |\n\n'
+  + Array.from({ length: 40 }, (_, i) => `长回答的第 ${i + 1} 段。跳转应定位具体选区，保留输入框，并避开顶部栏和批注浮层。`).join('\n\n')
+  + '\n\n截图里消失的是助手回答正文，用量数字还在。这和刚才启用插件时出现的显示问题一致；我先检查你现在的窗口，再定位插件为何会把正文隐藏。';
 const sourceDir = join(home, 'sessions', '-' + workspace.replaceAll('/', '-') + '--');
 for (const [id, title, text] of [['dca-preview', '批注交互预览', fixtureText], ['dca-other', '另一会话', '这是另一个会话，批注应相互独立。']]) {
   const sessionDir = join(sourceDir, 'session-' + id); await mkdir(sessionDir, { recursive: true });
@@ -114,10 +116,31 @@ try {
       const at = full.indexOf(text); if (at < 0) throw new Error('找不到测试选区: ' + text);
       const first = nodes.find(n => n.end > at), last = [...nodes].reverse().find(n => n.start < at + text.length);
       const range = document.createRange(); range.setStart(first.node, at - first.start); range.setEnd(last.node, at + text.length - last.start);
+      first.node.parentElement.scrollIntoView({ block: 'center', behavior: 'instant' });
       const s = window.getSelection(); s.removeAllRanges(); s.addRange(range);
       el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     }, text);
     await page.getByRole('button', { name: '添加到对话', exact: true }).waitFor();
+  };
+  const assertQuoteVisible = async (number, editing = false) => {
+    const marker = page.getByRole('button', { name: `批注 ${number}，待发送`, exact: true });
+    const id = await marker.getAttribute('data-dca-marker');
+    await page.waitForFunction(({ id, editing }) => {
+      const marks = [...document.querySelectorAll('[data-dca-highlight]')].filter(el => el.dataset.dcaHighlight === id);
+      const first = marks.map(el => el.getBoundingClientRect()).sort((a, b) => a.top - b.top)[0];
+      if (!first) return false;
+      const scroll = marks[0].closest('[data-conversation-scroll]'), pane = scroll.getBoundingClientRect();
+      const composer = scroll.querySelector('[data-composer-seat]').getBoundingClientRect();
+      const badge = document.querySelector(`[data-dca-marker="${id}"]`).getBoundingClientRect();
+      const editor = document.querySelector('.dca-editor')?.getBoundingClientRect();
+      const bottom = Math.max(...marks.map(el => el.getBoundingClientRect().bottom));
+      const hit = document.elementFromPoint(badge.left + badge.width / 2, badge.top + badge.height / 2);
+      return badge.top >= pane.top + 12 && bottom <= composer.top - 12 && hit?.dataset.dcaMarker === id
+        && (!editing || (editor && editor.top >= pane.top + 12 && editor.bottom <= first.top - 6));
+    }, { id, editing });
+    if (!editing) {
+      assert.equal(await page.locator('.dca-float').count(), 0, 'Quote navigation must close overlays instead of opening another details card');
+    }
   };
   await select(referenceQuote); await screenshots('01-selection-menu');
   await measureControl('menu', '.dca-menu');
@@ -162,10 +185,41 @@ try {
   await screenshots('11-composer-annotations');
   await page.locator('.dca-annotations').getByRole('button', { name: '编辑批注 1', exact: true }).click();
   assert.equal(await comment.inputValue(), '测试1', 'Popup pencil must edit the saved comment');
+  await assertQuoteVisible(1, true);
   assert.equal(await page.getByText('原文已变化，无法准确定位；批注原文仍保留。', { exact: true }).count(), 0, 'Folded reasoning must not handle a response quote');
   assert.equal(await page.locator('[data-chat-group-part="reasoning"] .dca-source').count(), 0);
   assert.ok(await page.locator('[data-chat-group-part="response"] .dca-source').count() > 0);
   await page.getByRole('button', { name: '取消', exact: true }).click();
+  await page.locator('[data-conversation-scroll]').evaluate(el => el.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.locator('.dca-quote').click();
+  await assertQuoteVisible(1);
+  await screenshots('12-long-answer-jump');
+  const previewInput = page.locator('[contenteditable=true]').first();
+  const draftLines = Array.from({ length: 8 }, (_, i) => `跳转期间保留第 ${i + 1} 行草稿`);
+  await previewInput.click(); await previewInput.press('End');
+  for (const [index, line] of draftLines.entries()) { if (index) await previewInput.press('Shift+Enter'); await page.keyboard.insertText(line); }
+  const tallDraft = await previewInput.innerText();
+  assert.ok(draftLines.every(line => tallDraft.includes(line)), 'Native composer must contain all multiline draft input');
+  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.locator('.dca-annotations').getByRole('button', { name: '编辑批注 1', exact: true }).click();
+  await comment.fill(Array.from({ length: 12 }, (_, i) => `第 ${i + 1} 行编辑内容`).join('\n'));
+  await assertQuoteVisible(1, true);
+  assert.equal(await previewInput.innerText(), tallDraft, 'Navigation must preserve the native composer draft');
+  await screenshots('13-tall-composer-edit');
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await previewInput.click(); await previewInput.press('ControlOrMeta+a'); await previewInput.press('Backspace');
+  await page.waitForFunction(() => document.querySelector('[contenteditable=true]').innerText.trim() === '');
+  await page.setViewportSize({ width: 480, height: 860 });
+  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.locator('.dca-annotations').getByRole('button', { name: '编辑批注 1', exact: true }).click();
+  await assertQuoteVisible(1, true);
+  await screenshots('14-narrow-jump-edit');
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await page.getByRole('button', { name: '1 条注释', exact: true }).click();
+  await page.locator('.dca-quote').click();
+  await assertQuoteVisible(1);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await select('连续添加多条批注'); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.getByRole('textbox', { name: '批注 2 的可选评论', exact: true }).click();
   await page.getByRole('textbox', { name: '批注 2 的可选评论' }).press('Enter');
@@ -191,7 +245,13 @@ try {
   assert.equal(await page.getByText('[DSH_ANNOTATIONS_V1:', { exact: false }).count(), 0);
   await page.locator('.dca-sent-pills .dca-batch-chip').first().click(); await page.locator('.dca-annotations').waitFor();
   assert.equal(await page.locator('.dca-annotation').count(), 2);
-  await page.keyboard.press('Escape');
+  await page.locator('.dca-quote').first().click();
+  assert.equal(await page.locator('.dca-float').count(), 0, 'Sent quote navigation must close its details card');
+  await page.waitForFunction(() => {
+    const marks = [...document.querySelectorAll('.dca-highlight.dca-sent')];
+    const first = marks[0].getBoundingClientRect(), pane = marks[0].closest('[data-conversation-scroll]');
+    return first.top > pane.getBoundingClientRect().top + 36 && first.bottom < pane.querySelector('[data-composer-seat]').getBoundingClientRect().top - 12;
+  });
   await select('const greeting = "你好🙂";\nconsole.log(greeting);');
   await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.getByRole('textbox', { name: '批注 3 的可选评论', exact: true }).click();
@@ -292,7 +352,7 @@ try {
   assert.deepEqual(consoleErrors, []);
   await writeFile(join(artifacts, 'ui-measurements.json'), JSON.stringify(uiMeasurements, null, 2));
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: '0.2.0-rc.2', isolatedHome: home, errors, acceptedUser: last,
-    checks: ['enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'editor-and-popup-delete', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'detach-and-reattach', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
+    checks: ['enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'detach-and-reattach', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {
   if (page) { await screenshots('failure'); console.error(await page.locator('body').innerText()); }
