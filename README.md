@@ -21,13 +21,13 @@
 ```sh
 cd /path/to/dsh-codex-annotations
 npm pack
-dsh plugin --profile desktop add /path/to/deepseekharness-plugin-dsh-codex-annotations-0.1.0.tgz
+dsh plugin --profile desktop add /path/to/deepseekharness-plugin-dsh-codex-annotations-0.1.1.tgz
 ```
 
 使用 Web 时把 `desktop` 换成 `web`。如果系统没有 `dsh` 命令，macOS 应用内的入口为：
 
 ```sh
-'/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh' plugin --profile desktop add /absolute/path/to/deepseekharness-plugin-dsh-codex-annotations-0.1.0.tgz
+'/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh' plugin --profile desktop add /absolute/path/to/deepseekharness-plugin-dsh-codex-annotations-0.1.1.tgz
 ```
 
 安装后重新打开 DSH。首次试用时建议暂时停用其他选区/批注插件，避免多个菜单同时出现。CLI/TUI 不提供这些图形交互。
@@ -59,7 +59,7 @@ npm run test:host
 
 `test:host` 启动独立测试配置和本地固定回复模型，不使用真实模型服务，也不修改日常 DSH 配置。默认使用 macOS DSH 应用和 Chrome；其他安装路径可通过 `DCA_CLI`、`DCA_LLM_MODULE`、`DCA_BROWSER` 指定。
 
-测试截图、模型实际收到的消息和测试证据输出到 `artifacts/`；该目录不提交。详细验证范围见 [验证记录](docs/verification.md)。
+测试截图、模型实际收到的消息和测试证据输出到 `artifacts/`；该目录不提交。详细验证范围见 [验证记录](docs/verification.md) 与 [UI 尺寸对照](docs/ui-comparison.md)。
 
 ## 结构
 

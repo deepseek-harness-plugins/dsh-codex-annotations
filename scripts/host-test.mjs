@@ -51,8 +51,21 @@ for (const [id, title, text] of [['dca-preview', '批注交互预览', fixtureTe
   await writeFile(join(sessionDir, 'session.v4.jsonl'), [JSON.stringify({ type: 'session', version: 4, id: 'session-' + id, createdAt: now, cwd: workspace, isSeeded: false, delegationDepth: 0, agentPreset: 'standard' }), ...events.map((e, seq) => JSON.stringify({ ...e, seq, time: now + seq + 1 }))].join('\n') + '\n');
 }
 let child, browser, page, log = '';
-const errors = [], consoleErrors = [];
-const screenshots = async name => { await page.screenshot({ path: join(artifacts, `${name}.png`) }); };
+const errors = [], consoleErrors = [], uiMeasurements = {};
+const screenshots = async name => { await page.screenshot({ path: join(artifacts, `${name}.png`), scale: 'css' }); };
+// Compare physical pixels at the same 2x scale as the supplied Codex captures.
+// Full workflow screenshots stay at 1x; only the isolated controls use 2x.
+const measureControl = async (name, selector) => {
+  const element = page.locator(selector).first();
+  uiMeasurements[name] = await element.evaluate(el => {
+    const rect = el.getBoundingClientRect(), style = getComputedStyle(el);
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: style.borderRadius,
+      fontFamily: style.fontFamily, fontSize: style.fontSize, lineHeight: style.lineHeight,
+      cornerShape: style.cornerShape, background: style.backgroundColor, border: style.border, shadow: style.boxShadow };
+  });
+  const box = await element.boundingBox();
+  await page.screenshot({ path: join(artifacts, `pixel-${name}@2x.png`), scale: 'device', clip: { x: Math.max(0, box.x - 12), y: Math.max(0, box.y - 12), width: box.width + 24, height: box.height + 24 } });
+};
 try {
   child = spawn(cli, ['--profile', 'web', '--patch', patch, '--host', '127.0.0.1', '--port', '0', '--no-open'], {
     env: { ...process.env, DSH_HOME: home, DSH_AGENTS_HOME: join(root, 'agents'), DSH_TELEMETRY_DISABLED: '1', DCA_LLM_MODULE: llmModule, DCA_CAPTURE_PATH: capturePath }
@@ -62,7 +75,7 @@ try {
   while (!/dsh web: (http:\/\/\S+)/.test(log)) { if (Date.now() > deadline || child.exitCode !== null) throw new Error('Host boot failed: ' + log); await new Promise(r => setTimeout(r, 100)); }
   await writeFile(join(artifacts, 'host.log'), log);
   browser = await chromium.launch({ channel: process.env.DCA_BROWSER ?? 'chrome', headless: true });
-  page = await browser.newPage({ viewport: { width: 1280, height: 900 }, locale: 'zh-CN' });
+  page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: 'zh-CN' });
   page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') consoleErrors.push(m.text()); }); page.setDefaultTimeout(12000);
   await page.goto(log.match(/dsh web: (http:\/\/\S+)/)[1], { waitUntil: 'domcontentloaded' });
   await page.locator('[contenteditable=true]').waitFor();
@@ -92,11 +105,28 @@ try {
     await page.getByRole('button', { name: '添加到对话', exact: true }).waitFor();
   };
   await select('选中的原文和你的评论'); await screenshots('01-selection-menu');
+  await measureControl('menu', '.dca-menu');
+  assert.equal(uiMeasurements.menu.height, 30);
+  assert.ok(uiMeasurements.menu.width <= 155);
   await page.getByRole('button', { name: '更多详情', exact: true }).click();
   assert.equal(await page.locator('.dca-details pre').innerText(), '选中的原文和你的评论');
   await page.getByRole('button', { name: '关闭详情' }).click();
   await select('选中的原文和你的评论'); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   const comment = page.getByRole('textbox', { name: '批注 1 的可选评论' });
+  await measureControl('editor', '.dca-editor');
+  assert.equal(uiMeasurements.editor.width, 296); assert.equal(uiMeasurements.editor.height, 46);
+  await measureControl('marker', '.dca-marker');
+  assert.equal(uiMeasurements.marker.width, 27); assert.equal(uiMeasurements.marker.height, 27);
+  const highlight = await page.locator('.dca-highlight').first().boundingBox();
+  assert.ok(Math.abs(uiMeasurements.marker.y + 27 - highlight.y) <= 1, 'Marker must sit above the quote rather than cover its text');
+  const dock = await page.locator('.dca-dock').boundingBox();
+  const composer = await page.locator('[contenteditable=true]').first().evaluate(el => {
+    const rect = el.closest('[class*="_card"]').getBoundingClientRect(); return { x: rect.x, width: rect.width };
+  });
+  uiMeasurements.dock = { ...dock, composer };
+  const dockBackground = await page.locator('.dca-dock').evaluate(el => getComputedStyle(el).backgroundColor);
+  assert.notEqual(dockBackground, 'rgba(0, 0, 0, 0)', 'Floating dock must not mix with messages scrolling behind it');
+  assert.ok(Math.abs(dock.x - composer.x) <= 1 && Math.abs(dock.width - composer.width) <= 1, 'Annotation dock must align with the native composer');
   await comment.fill('请补充一个例子。'); await screenshots('02-inline-comment'); await comment.press('Enter');
   await select('连续添加多条批注'); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.getByRole('textbox', { name: '批注 2 的可选评论' }).press('Enter');
@@ -125,14 +155,23 @@ try {
   await select('const greeting = "你好🙂";\nconsole.log(greeting);');
   await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.getByRole('textbox', { name: '批注 3 的可选评论' }).fill('代码注释\n保留中文与🙂');
+  const codeMarker = page.locator('[data-dca-marker]').last(), codeId = await codeMarker.getAttribute('data-dca-marker');
+  const codeTop = await page.locator(`[data-dca-highlight="${codeId}"]`).evaluateAll(elements => Math.min(...elements.map(el => el.getBoundingClientRect().top)));
+  const codeMarkerBox = await codeMarker.boundingBox();
+  assert.ok(codeMarkerBox.y + codeMarkerBox.height <= codeTop + 1, 'Multiline quote marker must not cover selected code');
   await page.getByRole('button', { name: '完成批注' }).click();
-  await page.emulateMedia({ colorScheme: 'dark' }); await screenshots('06-dark');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.locator('[data-dca-marker]').last().click(); await screenshots('06-dark');
+  const darkPanel = await page.locator('.dca-editor').evaluate(el => getComputedStyle(el).backgroundColor);
+  assert.notEqual(darkPanel, uiMeasurements.editor.background);
+  uiMeasurements.darkBackground = darkPanel;
+  await page.getByRole('button', { name: '完成批注' }).click();
   await page.setViewportSize({ width: 480, height: 860 }); await page.locator('[data-dca-marker]').last().click();
   const box = await page.locator('.dca-editor').boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= 480);
   await screenshots('07-narrow'); await page.getByRole('button', { name: '完成批注' }).click();
   await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme: 'light' });
   // Detaching is an explicit send decision and must survive subsequent typing.
-  await page.getByRole('button', { name: '随下一条消息发送 · 取消', exact: true }).click();
+  await page.getByRole('button', { name: '取消附加批注', exact: true }).click();
   await input.click(); await page.keyboard.insertText('不带批注的草稿');
   assert.ok(!await input.innerText().then(t => /@\s*批注/.test(t)));
   await page.getByRole('button', { name: '附加批注', exact: true }).click();
@@ -195,8 +234,9 @@ try {
   assert.equal(await page.locator('[data-dca-dock]').count(), 0);
   assert.deepEqual(errors, []);
   assert.deepEqual(consoleErrors, []);
+  await writeFile(join(artifacts, 'ui-measurements.json'), JSON.stringify(uiMeasurements, null, 2));
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: '0.2.0-rc.2', isolatedHome: home, errors, acceptedUser: last,
-    checks: ['selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'detach-and-reattach', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
+    checks: ['pixel-control-geometry', 'native-dock-alignment', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'detach-and-reattach', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {
   if (page) { await screenshots('failure'); console.error(await page.locator('body').innerText()); }

@@ -7,18 +7,18 @@ import css from './styles.css';
 
 export const inject = ['slots', 'sessions', 'conversation', 'uiConversation', 'inputTriggers'];
 const snapshot = store => useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
+const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'chevron' ? <path d="m8 10 4 4 4-4"/> : type === 'comment' ? <path d="M20 11a8 8 0 0 1-8 8H5l-3 3V11a9 9 0 0 1 18 0Z"/> : type === 'attach' ? <path d="m8 12 6-6a4 4 0 0 1 6 6L9 23a6 6 0 0 1-8-8L13 3"/> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
 
-function Float({ anchor, width = 580, children, className = '', onDismiss }) {
+function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss }) {
   const root = useRef(null); const [position, setPosition] = useState({ left: 12, top: 12 });
   useLayoutEffect(() => {
     const update = () => {
       const rect = anchor(), el = root.current;
       if (!rect || !el) { onDismiss?.(); return; }
       const vw = window.innerWidth, vh = window.innerHeight;
-      const left = Math.max(12, Math.min(rect.left, vw - el.offsetWidth - 12));
-      let top = rect.top - el.offsetHeight - 14;
-      if (top < 12) top = rect.bottom + 14;
+      const left = Math.max(12, Math.min(rect.left + inset, vw - el.offsetWidth - 12));
+      let top = rect.top - el.offsetHeight - gap;
+      if (top < 12) top = rect.bottom + gap;
       setPosition({ left, top: Math.max(12, Math.min(top, vh - el.offsetHeight - 12)) });
     };
     update(); const observer = new ResizeObserver(update); observer.observe(root.current);
@@ -27,12 +27,12 @@ function Float({ anchor, width = 580, children, className = '', onDismiss }) {
     const escape = e => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss?.(); } };
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { observer.disconnect(); window.removeEventListener('resize', update); document.removeEventListener('scroll', update, true); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-  }, [anchor, width, onDismiss]);
+  }, [anchor, gap, inset, onDismiss]);
   return createPortal(<div ref={root} data-dca-ui="" className={`dca-float ${className}`} style={position}>{children}</div>, document.body);
 }
 
 function Details({ note, anchor, close, locate }) {
-  return <Float anchor={anchor} width={540} className="dca-details" onDismiss={close}>
+  return <Float anchor={anchor} className="dca-details" onDismiss={close}>
     <header><span>{note.number ? `批注 ${note.number}` : '选区详情'}</span><button className="dca-icon" aria-label="关闭详情" onClick={close}>{icon('close')}</button></header>
     <pre>{note.quote}</pre><p className="dca-meta">助手原文 · {note.number ? (note.status === 'sent' ? '已发送' : '待发送') : '尚未添加'} · {note.quote.length} 字符</p>
     {note.comment && <footer>{note.comment}</footer>}
@@ -44,7 +44,7 @@ function Editor({ note, face, anchor, close }) {
   const input = useRef(null);
   useEffect(() => { input.current?.focus({ preventScroll: true }); }, []);
   useLayoutEffect(() => { if (input.current) { input.current.style.height = 'auto'; input.current.style.height = `${input.current.scrollHeight}px`; } }, [note.comment]);
-  return <Float anchor={anchor} className="dca-editor" onDismiss={close}>
+  return <Float anchor={anchor} gap={31} inset={-8} className="dca-editor" onDismiss={close}>
     <textarea ref={input} aria-label={`批注 ${note.number} 的可选评论`} placeholder="添加可选评论…" rows={1} value={note.comment}
       onChange={e => face.edit(note.id, { comment: e.target.value })}
       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); e.stopPropagation(); close(); } }} />
@@ -75,9 +75,17 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
         setLayout(notes.flatMap(note => {
           const range = restoreRange(source.current, note); if (!range) return [];
           const end = selectionEndRect(range);
-          const rects = [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0).map(r => ({ left: r.left - bounds.left, top: r.top - bounds.top, width: r.width, height: r.height }));
-          let left = Math.min(end.right - bounds.left + 3, bounds.width - 26), top = end.bottom - bounds.top - 14;
-          while (used.some(p => Math.abs(p.top - top) < 24 && Math.abs(p.left - left) < 28)) top += 28;
+          // Nested inline/code elements can repeat the same rectangle. Painting
+          // it twice changes the selection color even though the text is identical.
+          const unique = new Map([...range.getClientRects()].filter(r => r.width > 0 && r.height > 0).map(r => [JSON.stringify([r.left, r.top, r.width, r.height]), r]));
+          const rects = [...unique.values()].map(r => ({ left: r.left - bounds.left, top: r.top - bounds.top, width: r.width, height: r.height }));
+          if (!rects.length) return [];
+          let left = Math.max(0, Math.min(end.right - bounds.left - 13.5, bounds.width - 27)), top = Math.min(...rects.map(r => r.top)) - 27;
+          const initialLeft = left;
+          while (used.some(p => Math.abs(p.top - top) < 27 && Math.abs(p.left - left) < 29)) {
+            left -= 31;
+            if (left < 0) { left = initialLeft; top -= 31; }
+          }
           used.push({ left, top });
           return [{ note, rects, left, top }];
         }));
@@ -102,18 +110,18 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
     return () => { clearTimeout(timer); window.removeEventListener('dca:locate', locate); window.removeEventListener('dca:edit', locate); };
   }, [face, nodeKey]);
   const active = open && (view.annotations.find(a => a.id === open.note.id) ?? open.note);
-  const anchor = () => active ? (restoreRange(source.current, active) ? selectionEndRect(restoreRange(source.current, active)) : root.current.getBoundingClientRect()) : selection?.range?.getBoundingClientRect();
+  const anchor = () => active ? (restoreRange(source.current, active)?.getBoundingClientRect() ?? root.current.getBoundingClientRect()) : selection?.range?.getBoundingClientRect();
   const close = () => { setOpen(null); setSelection(null); };
   return <div ref={root} className="dca-source" data-dca-node-key={nodeKey} data-dca-session={face.sessionId}>
     <div ref={source} data-dca-content="" onPointerUp={() => setTimeout(selected, 0)} onKeyUp={selected}><Inner {...props}/></div>
     <div className="dca-layer" data-dca-ui="">
       {layout.map(({ note, rects, left, top }) => <React.Fragment key={note.id}>
-        {rects.map((rect, i) => <span key={i} className={`dca-highlight ${note.status === 'sent' ? 'dca-sent' : ''}`} style={rect}/>)}
+        {rects.map((rect, i) => <span key={i} data-dca-highlight={note.id} className={`dca-highlight ${note.status === 'sent' ? 'dca-sent' : ''}`} style={rect}/>)}
         <button className="dca-marker" data-dca-marker={note.id} style={{ left, top }} aria-label={`批注 ${note.number}，${note.status === 'sent' ? '已发送' : '待发送'}`}
           onClick={() => { setSelection(null); setOpen({ kind: note.status === 'sent' ? 'details' : 'edit', note }); }}>{note.number}</button>
       </React.Fragment>)}
     </div>
-    {selection && !open && <Float anchor={anchor} width={275} className="dca-menu" onDismiss={close}>
+    {selection && !open && <Float anchor={anchor} className="dca-menu" onDismiss={close}>
       <button onClick={() => { const note = face.add(selection.selector); if (note) { setOpen({ kind: 'edit', note }); window.getSelection()?.removeAllRanges(); } }}>添加到对话</button>
       <button onClick={() => setOpen({ kind: 'details', note: selection.selector })}>更多详情</button>
     </Float>}
@@ -139,9 +147,9 @@ function Dock({ dca: face }) {
   return <div className="dca-dock" data-dca-ui="" data-dca-dock="">
     {notice && <div role="alert" className="dca-notice"><span>{notice}</span><button aria-label="关闭提示" onClick={face.dismiss}>×</button></div>}
     {!!pending.length && <><div className="dca-summary">
-      <button onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{pending.filter(a => a.selected).length} 条批注 {expanded ? '⌃' : '⌄'}</button>
-      {pending.map(note => <button key={note.id} className={note.selected ? '' : 'dca-muted'} onClick={e => locate(note, e)} title={note.quote}><span className="dca-number">{note.number}</span>{note.comment ? '有评论' : '原文'}</button>)}
-      <button className="dca-attach" onClick={() => face.run(() => attached ? face.detach() : face.ensure(true))}>{attached ? '随下一条消息发送 · 取消' : '附加批注'}</button>
+      <button className="dca-toggle" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} aria-label={`${pending.filter(a => a.selected).length} 条批注 ${expanded ? '⌃' : '⌄'}`} title={attached ? '批注已附加，随下一条消息发送' : '批注已保存，尚未附加'}>{icon('comment')}<span>批注 {pending.filter(a => a.selected).length}</span><span className={expanded ? 'dca-chevron dca-expanded' : 'dca-chevron'}>{icon('chevron')}</span></button>
+      {pending.map(note => <button key={note.id} className={`dca-preview ${note.selected ? '' : 'dca-muted'}`} onClick={e => locate(note, e)} title={`${note.quote}${note.comment ? `\n${note.comment}` : ''}`}><span className="dca-number">{note.number}</span><span>{note.comment || note.quote}</span></button>)}
+      <button className="dca-icon dca-attach" aria-label={attached ? '取消附加批注' : '附加批注'} title={attached ? '取消附加批注' : '附加批注'} onClick={() => face.run(() => attached ? face.detach() : face.ensure(true))}>{icon(attached ? 'close' : 'attach')}</button>
     </div>
     {expanded && <div className="dca-list">{pending.map(note => <div className="dca-row" key={note.id}>
       <input type="checkbox" aria-label={`发送批注 ${note.number}`} checked={note.selected} onChange={e => face.edit(note.id, { selected: e.target.checked })}/>
@@ -165,7 +173,7 @@ function User({ inner: Inner, dca: face, ...props }) {
   return <div><Inner {...props} node={{ ...props.node, data: { ...props.node.data, content } }}/>
     <div className="dca-sent-pills" data-dca-ui="">{notes.map(note => <button className="dca-pill" key={note.id} title={`${note.quote}\n${note.comment}`} onClick={e => {
       setDetail({ note: { ...note, status: 'sent' }, element: e.currentTarget });
-    }}><span className="dca-number">{note.number}</span>{note.comment || '引用原文'}</button>)}</div>
+    }}><span className="dca-number">{note.number}</span><span>{note.comment || '引用原文'}</span></button>)}</div>
     {detail && <Details note={detail.note} anchor={() => detail.element.getBoundingClientRect()} close={() => setDetail(null)} locate={() => {
       const mounted = [...document.querySelectorAll('[data-dca-node-key]')].some(el => el.dataset.dcaSession === face.sessionId && el.dataset.dcaNodeKey === detail.note.nodeKey);
       if (!mounted) face.report('原文暂未加载，请先向上加载历史消息；引用内容可在这里完整查看。');
