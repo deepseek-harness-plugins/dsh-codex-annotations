@@ -36,10 +36,9 @@
 .dca-batch-open>svg { width:11px;height:11px;color:var(--dsw-alias-label-tertiary,#8e8e8e); }
 .dca-batch-open { flex:1; }.dca-batch-open>svg { flex:none; }.dca-batch-open>span { white-space:nowrap; }
 .dca-chip-remove { corner-shape:round;box-sizing:border-box;position:absolute;right:5px;top:5px;width:20px;height:20px;display:grid;place-items:center;border:1px solid var(--dsw-alias-border-l3,#e8e8e8);border-radius:50%;padding:0;background:var(--dsw-alias-button-floating-fill,#fff);color:inherit;cursor:pointer;opacity:0;pointer-events:none; }.dca-chip-remove svg { width:14px;height:14px; }
-.dca-batch-chip:is(:hover,:focus-within) .dca-chip-remove,.dca-detached .dca-chip-remove { opacity:1;pointer-events:auto; }
-.dca-batch-chip:has(.dca-chip-remove):is(:hover,:focus-within) .dca-batch-open>span,.dca-detached .dca-batch-open>span { mask-image:linear-gradient(to right,#000 calc(100% - 23px),transparent calc(100% - 5px)); }
+.dca-batch-chip:is(:hover,:focus-within) .dca-chip-remove { opacity:1;pointer-events:auto; }
+.dca-batch-chip:has(.dca-chip-remove):is(:hover,:focus-within) .dca-batch-open>span { mask-image:linear-gradient(to right,#000 calc(100% - 23px),transparent calc(100% - 5px)); }
 .dca-batch-open:focus-visible,.dca-chip-remove:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary,#3a83f7);outline-offset:2px; }
-.dca-detached { opacity:.55; }
 .dca-annotations { width:min(384px,calc(100vw - 24px));border:1px solid var(--dsw-alias-border-l3,#e8e8e8);border-radius:14px;padding:13px;box-shadow:0 3px 8px #0000000a;max-height:65vh;overflow:auto; }
 .dca-annotation { display:grid;grid-template-columns:14px minmax(0,1fr) 44px;column-gap:13px;align-items:start;font-size:13px;line-height:18px; }.dca-annotation+.dca-annotation { margin-top:16px;padding-top:14px;border-top:1px solid var(--dsw-alias-border-l3,#e8e8e8); }
 .dca-item-number { color:var(--dsw-alias-label-tertiary,#929292);font-size:14px;line-height:20px;position:relative;cursor:pointer; }.dca-item-number input { position:absolute;width:1px;height:1px;opacity:0; }.dca-item-number:focus-within { outline:2px solid var(--dsw-alias-state-business-primary,#3a83f7);border-radius:3px; }

@@ -35,18 +35,18 @@ export function createRuntime(ctx) {
         reference: { source: SOURCE, ref, label: '批注', clipboardText: token() },
         span: { start, end: at < 0 ? start : start + token().length, draftRev: state.draftRev }
       }) === true;
-      if (!accepted) throw new Error('原生输入框未接受批注引用，请点击“附加批注”重试。');
+      if (!accepted) throw new Error('原生输入框未接受批注引用，请重试添加批注。');
       return true;
     };
     const detach = () => {
-      if (!editable()) throw new Error('请等待当前发送完成后再取消附加。');
+      if (!editable()) throw new Error('请等待当前发送完成后再修改批注。');
       // Delete in reverse order so other native references keep their coordinates.
       for (const own of [...input.state.getSnapshot().occurrences].filter(o => o.source === SOURCE).reverse()) {
         const state = input.state.getSnapshot(), start = detectOffset(own.offset, state);
         binding.ctx.bail(binding.ctx, 'slash/input-insert-text', { text: '', span: { start, end: start + 1, draftRev: state.draftRev } });
       }
     };
-    const face = { sessionId: String(sessionId), store, input, editable, run, report, ensure, detach,
+    const face = { sessionId: String(sessionId), store, input, editable, run, report,
       notice: { subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); }, getSnapshot: () => notice },
       dismiss: () => report(''),
       add: selector => run(() => { const note = store.add(selector); ensure(true); return note; }),
@@ -57,6 +57,11 @@ export function createRuntime(ctx) {
         if (!store.selected().length) detach();
       }),
       remove: id => run(() => { if (!editable()) throw new Error('请等待发送完成后再删除批注。'); store.remove(id); if (!store.selected().length) detach(); }),
+      clear: () => run(() => {
+        if (!editable()) throw new Error('请等待发送完成后再删除批注。');
+        store.clearPending();
+        detach();
+      }),
       locate: note => {
         window.dispatchEvent(new CustomEvent('dca:locate', { detail: { sessionId: String(sessionId), note } }));
       }
@@ -95,7 +100,13 @@ export function createRuntime(ctx) {
     releases.push(() => { disposed = true; });
     binding.ctx.effect(() => () => { disposed = true; offInput(); offChat(); offInbox(); faces.delete(sessionId); });
     if (storageError) report(storageError);
-    queueMicrotask(() => { repair(); reconcile(); });
+    queueMicrotask(() => {
+      reconcile();
+      // Preserve pending notes from the old detached UI without exposing a
+      // separate reattach control. Current removal clears pending notes.
+      if (store.selected().length) run(() => ensure(true));
+      repair();
+    });
     return face;
   };
   const source = {
@@ -104,7 +115,7 @@ export function createRuntime(ctx) {
     codec: { serialize: async (ref, signal) => {
       if (signal.aborted) throw new Error('发送已取消，批注保留。');
       const face = [...faces.values()].find(f => f.store.getSnapshot().ref === ref);
-      if (!face) throw new Error('找不到批注引用所属会话，请重新附加批注。');
+      if (!face) throw new Error('找不到批注引用所属会话，请重新选择原文添加批注。');
       return encodePayload(face.store.prepare(ref));
     } },
     openReference: (session, reference) => {

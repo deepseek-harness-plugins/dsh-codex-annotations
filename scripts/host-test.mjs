@@ -251,7 +251,17 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded' }); await page.locator('[data-dca-marker]').nth(1).waitFor();
   assert.deepEqual(await page.locator('[data-dca-marker]').allTextContents(), ['1', '2']);
   await screenshots('04-restored-draft');
-  const input = page.locator('[contenteditable=true]').first(); await input.click(); await input.press('End');
+  const input = page.locator('[contenteditable=true]').first();
+  // Old versions could retain pending notes with their native reference
+  // detached. Simulate that state through the native editor, then restore it.
+  await input.click(); await input.press('ControlOrMeta+a'); await input.press('Backspace');
+  await page.waitForFunction(() => !document.querySelector('[contenteditable=true] [data-composer-chip="dsh-codex-annotations"]'));
+  assert.equal(await page.locator('[data-dca-marker]').count(), 2);
+  await page.reload({ waitUntil:'domcontentloaded' }); await input.waitFor();
+  await input.locator('[data-composer-chip="dsh-codex-annotations"]').waitFor({ state:'attached' });
+  assert.deepEqual(await page.locator('[data-dca-marker]').allTextContents(), ['1','2']);
+  assert.equal(await page.getByRole('button', { name:'附加批注', exact:true }).count(), 0);
+  await input.click(); await input.press('End');
   await page.keyboard.insertText('请按批注修改。'); await input.pressSequentially(' Keep English.');
   assert.match(await input.innerText(), /请按批注修改。 Keep English\./);
   await input.press('Enter'); await page.getByText('本地测试已收到批注与用户要求。', { exact: true }).waitFor();
@@ -297,13 +307,35 @@ try {
   const box = await page.locator('.dca-editor').boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= 480);
   await screenshots('07-narrow'); await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme: 'light' });
-  // Detaching is an explicit send decision and must survive subsequent typing.
+  // One click removes all pending notes and their reference, preserving native
+  // text/files and sent notes. No detached chip or reattach step remains.
+  await select('连续添加多条批注'); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
+  await page.getByRole('textbox', { name: '批注 4 的可选评论' }).press('Enter');
+  await input.click(); await input.press('End'); await page.keyboard.insertText('不带批注的草稿');
+  await page.locator('input[type=file]').first().setInputFiles([
+    { name: 'keep.txt', mimeType: 'text/plain', buffer: Buffer.from('移除批注后仍保留附件🙂') }
+  ]);
+  await page.getByText('keep.txt', { exact: true }).waitFor();
+  const draftBeforeClear = await input.innerText();
   await page.locator('.dca-dock .dca-batch-chip').hover();
-  await page.getByRole('button', { name: '取消附加批注', exact: true }).click();
-  await input.click(); await page.keyboard.insertText('不带批注的草稿');
-  assert.ok(!await input.innerText().then(t => /@\s*批注/.test(t)));
-  await page.getByRole('button', { name: '附加批注', exact: true }).click();
+  await page.getByRole('button', { name: '删除全部待发送批注', exact: true }).click();
+  await page.locator('[data-dca-dock]').waitFor({ state: 'hidden' });
+  await page.locator('.dca-marker').filter({ hasText: '3' }).waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('.dca-highlight:not(.dca-sent)').count(), 0);
+  assert.deepEqual(await page.locator('[data-dca-marker]').allTextContents(), ['1','2']);
+  assert.equal(await page.locator('.dca-float').count(), 0);
+  assert.equal(await page.getByRole('alertdialog').count(), 0);
+  assert.equal(await input.locator('[data-composer-chip="dsh-codex-annotations"]').count(), 0);
+  assert.equal((await input.innerText()).trim(), draftBeforeClear.trim());
+  assert.equal(await page.getByText('keep.txt', { exact: true }).count(), 1);
+  await screenshots('15-one-click-clear-preserves-draft');
+  await page.reload({ waitUntil:'domcontentloaded' }); await input.waitFor();
+  assert.equal(await page.locator('[data-dca-dock]').count(), 0, 'Removed batch must not return after refresh');
   assert.match(await input.innerText(), /不带批注的草稿/);
+  await select('const greeting = "你好🙂";\nconsole.log(greeting);');
+  await page.getByRole('button', { name: '添加到对话', exact: true }).click();
+  await page.getByRole('textbox', { name: '批注 3 的可选评论' }).fill('代码注释\n保留中文与🙂');
+  await page.getByRole('button', { name: '保存', exact:true }).click();
   await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
   await page.getByRole('checkbox', { name: '发送批注 3', exact: true }).uncheck();
   await page.getByRole('button', { name: '发送消息', exact: true }).click();
@@ -380,7 +412,7 @@ try {
   assert.deepEqual(consoleErrors, []);
   await writeFile(join(artifacts, 'ui-measurements.json'), JSON.stringify(uiMeasurements, null, 2));
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: '0.2.0-rc.2', isolatedHome: home, errors, acceptedUser: last,
-    checks: ['enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'detach-and-reattach', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
+    checks: ['enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {
   if (page) { await screenshots('failure'); console.error(await page.locator('body').innerText()); }

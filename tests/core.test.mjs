@@ -56,6 +56,22 @@ test('迟到的发送确认不会清除复用编号的新批注，已发送编�
   assert.equal(s.add(selector).number, 2);
   assert.equal(s.getSnapshot().annotations.find(a => a.id === replacement.id).number, 1);
 });
+test('清空待发送批注保留已发送记录，旧引用失效且新批注复用空缺编号', () => {
+  const s = new AnnotationStore(storage(), 'a'), sent = s.add(selector);
+  s.acknowledge(s.prepare(s.getSnapshot().ref));
+  s.add(selector);
+  const unchecked = s.add(selector);
+  s.edit(unchecked.id, { selected: false });
+  const ref = s.getSnapshot().ref, old = s.prepare(ref);
+  s.clearPending();
+  assert.deepEqual(s.getSnapshot().annotations.map(a => [a.id, a.number, a.status]), [[sent.id, 1, 'sent']]);
+  assert.notEqual(s.getSnapshot().ref, ref);
+  assert.throws(() => s.prepare(ref), /失效/);
+  const replacement = s.add(selector);
+  assert.equal(replacement.number, 2);
+  s.acknowledge(old);
+  assert.equal(s.selected()[0].id, replacement.id);
+});
 test('序列化及失败不清空批注，只有已接受的原始用户消息才确认', () => {
   const s = new AnnotationStore(storage(), 'a'); s.add(selector);
   const p = s.prepare(s.getSnapshot().ref);

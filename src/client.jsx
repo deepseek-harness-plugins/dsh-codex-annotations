@@ -8,7 +8,7 @@ import css from './styles.css';
 
 export const inject = ['slots', 'sessions', 'conversation', 'uiConversation', 'inputTriggers'];
 const snapshot = store => useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'edit' ? <path d="m15 4 5 5M4 20l5-1L20 8a3.5 3.5 0 0 0-5-5L4 14l-1 7Z"/> : type === 'delete' ? <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></> : type === 'comment' ? <><path d="M20 15a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h8M7 12h5"/></> : type === 'attach' ? <path d="m8 12 6-6a4 4 0 0 1 6 6L9 23a6 6 0 0 1-8-8L13 3"/> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
+const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'edit' ? <path d="m15 4 5 5M4 20l5-1L20 8a3.5 3.5 0 0 0-5-5L4 14l-1 7Z"/> : type === 'delete' ? <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></> : type === 'comment' ? <><path d="M20 15a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h8M7 12h5"/></> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
 
 function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss, viewport, reveal, avoid, hover }) {
   const root = useRef(null); const [position, setPosition] = useState({ left: 12, top: 12 });
@@ -150,7 +150,7 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
     window.addEventListener('dca:locate', locate); window.addEventListener('dca:edit', locate);
     return () => { clearTimeout(timer); window.removeEventListener('dca:locate', locate); window.removeEventListener('dca:edit', locate); };
   }, [face, nodeKey]);
-  const active = open && (view.annotations.find(a => a.id === open.note.id) ?? open.note);
+  const active = open && (open.note.id ? view.annotations.find(a => a.id === open.note.id) : open.note);
   const anchor = () => active ? (restoreRange(source.current, active)?.getBoundingClientRect() ?? root.current.getBoundingClientRect()) : selection?.range?.getBoundingClientRect();
   const close = () => { setOpen(null); setSelection(null); };
   return <div ref={root} className="dca-source" data-dca-node-key={nodeKey} data-dca-session={face.sessionId}>
@@ -174,11 +174,10 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
 }
 
 function Dock({ dca: face }) {
-  const view = snapshot(face.store), state = snapshot(face.input.state), notice = snapshot(face.notice);
+  const view = snapshot(face.store), notice = snapshot(face.notice);
   const popup = useHoverCard(), [editing, setEditing] = useState(null);
   const trigger = useRef(null);
   const pending = view.annotations.filter(a => a.status === 'pending');
-  const attached = state.occurrences.some(o => o.source === 'dsh-codex-annotations' && o.ref === view.ref);
   useEffect(() => { const open = e => { if (e.detail === face.sessionId) popup.open(); }; window.addEventListener('dca:open-list', open); return () => window.removeEventListener('dca:open-list', open); }, [face]);
   if (!pending.length && !notice) return null;
   const edit = (note, event) => {
@@ -191,10 +190,10 @@ function Dock({ dca: face }) {
   const count = pending.filter(a => a.selected).length;
   return <div className="dca-dock" data-dca-ui="" data-dca-dock="">
     {notice && <div role="alert" className="dca-notice"><span>{notice}</span><button aria-label="关闭提示" onClick={face.dismiss}>×</button></div>}
-    {!!pending.length && <div className={attached ? 'dca-batch-chip' : 'dca-batch-chip dca-detached'} data-dca-anchor="" {...popup.hover}>
+    {!!pending.length && <div className="dca-batch-chip" data-dca-anchor="" {...popup.hover}>
       <button ref={trigger} className="dca-batch-open" aria-label={count + ' 条注释'} aria-expanded={popup.expanded} onFocus={popup.open}
         onClick={() => { popup.close(); face.locate(pending.find(a => a.selected) ?? pending[0]); }}>{icon('comment')}<span>{count} 条注释</span></button>
-      <button className="dca-chip-remove" aria-label={attached ? '取消附加批注' : '附加批注'} onClick={() => face.run(() => attached ? face.detach() : face.ensure(true))}>{icon(attached ? 'close' : 'attach')}</button>
+      <button className="dca-chip-remove" aria-label="删除全部待发送批注" onClick={() => { if (face.clear() !== false) popup.close(); }}>{icon('close')}</button>
     </div>}
     {popup.expanded && !!pending.length && <AnnotationList notes={pending} face={face} anchor={() => trigger.current?.closest('.dca-batch-chip').getBoundingClientRect()} close={popup.close} hover={popup.hover} edit={edit}/>}
     {edited && <Editor key={edited.id} note={edited} face={face} anchor={() => editing.element.getBoundingClientRect()} close={() => setEditing(null)}/>}

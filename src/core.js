@@ -97,10 +97,16 @@ export class AnnotationStore {
     });
   }
   remove(id) { this.change(state => { state.annotations = state.annotations.filter(a => a.id !== id); }); }
+  clearPending() {
+    this.change(state => {
+      state.annotations = state.annotations.filter(a => a.status !== 'pending');
+      state.ref = uid();
+    });
+  }
   selected() { return this.view.annotations.filter(a => a.status === 'pending' && a.selected); }
   prepare(ref) {
     return this.change(state => {
-      if (ref !== state.ref) throw new Error('该批注引用已失效，请重新附加批注。');
+      if (ref !== state.ref) throw new Error('该批注引用已失效，请重新选择原文添加批注。');
       const annotations = state.annotations.filter(a => a.status === 'pending' && a.selected);
       if (!annotations.length) throw new Error('没有勾选待发送的批注。');
       const payload = { version: 1, id: uid(), sessionId: this.sessionId, ref,
