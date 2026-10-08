@@ -193,7 +193,7 @@ function Dock({ dca: face }) {
     {notice && <div role="alert" className="dca-notice"><span>{notice}</span><button aria-label="关闭提示" onClick={face.dismiss}>×</button></div>}
     {!!pending.length && <div className={attached ? 'dca-batch-chip' : 'dca-batch-chip dca-detached'} data-dca-anchor="" {...popup.hover}>
       <button ref={trigger} className="dca-batch-open" aria-label={count + ' 条注释'} aria-expanded={popup.expanded} onFocus={popup.open}
-        onClick={() => { popup.close(); face.locate(pending.find(a => a.selected) ?? pending[0]); }}>{icon('comment')}<span><strong>{count}</strong> 条<span className="dca-chip-label">注释</span></span></button>
+        onClick={() => { popup.close(); face.locate(pending.find(a => a.selected) ?? pending[0]); }}>{icon('comment')}<span>{count} 条注释</span></button>
       <button className="dca-chip-remove" aria-label={attached ? '取消附加批注' : '附加批注'} onClick={() => face.run(() => attached ? face.detach() : face.ensure(true))}>{icon(attached ? 'close' : 'attach')}</button>
     </div>}
     {popup.expanded && !!pending.length && <AnnotationList notes={pending} face={face} anchor={() => trigger.current?.closest('.dca-batch-chip').getBoundingClientRect()} close={popup.close} hover={popup.hover} edit={edit}/>}
@@ -217,7 +217,7 @@ function User({ inner: Inner, dca: face, ...props }) {
   const notes = payloads.flatMap(p => p.annotations).map(note => ({ ...note, status: 'sent' }));
   return <div><Inner {...props} node={{ ...props.node, data: { ...props.node.data, content } }}/>
     <div className="dca-sent-pills" data-dca-ui=""><div className="dca-batch-chip" data-dca-anchor="" {...popup.hover}><button ref={trigger} className="dca-batch-open" aria-label={`${notes.length} 条已发送注释`} aria-expanded={popup.expanded} onFocus={popup.open}
-      onClick={() => { popup.close(); face.locate(notes[0]); }}>{icon('comment')}<span><strong>{notes.length}</strong> 条<span className="dca-chip-label">注释</span></span></button></div></div>
+      onClick={() => { popup.close(); face.locate(notes[0]); }}>{icon('comment')}<span>{notes.length} 条注释</span></button></div></div>
     {popup.expanded && <AnnotationList notes={notes} face={face} editable={false} anchor={() => trigger.current.closest('.dca-batch-chip').getBoundingClientRect()} close={popup.close} hover={popup.hover}/>}
   </div>;
 }

@@ -175,7 +175,25 @@ try {
   await page.getByRole('button', { name: '批注 1，待发送', exact: true }).click();
   assert.equal(await comment.inputValue(), '', 'Cancel must preserve the saved comment');
   await comment.fill('测试1'); await screenshots('02-inline-comment'); await comment.press('Enter');
+  const countChip = page.locator('.dca-dock .dca-batch-chip');
+  const chipAppearance = () => countChip.evaluate(el => {
+    const label = el.querySelector('.dca-batch-open>span'), close = el.querySelector('.dca-chip-remove');
+    const text = getComputedStyle(label), button = getComputedStyle(close);
+    return { color: text.color, fontWeight: text.fontWeight, mask: text.maskImage,
+      closeOpacity: button.opacity, closeCorner: button.cornerShape, closeRadius: button.borderRadius };
+  });
+  await page.mouse.move(1200, 100);
+  const idleAppearance = await chipAppearance();
+  assert.equal(idleAppearance.mask, 'none', 'Idle chip must show the complete annotation count');
+  assert.equal(idleAppearance.closeOpacity, '0', 'Idle chip must hide the close control');
+  await measureControl('chip-idle', '.dca-dock .dca-batch-chip');
   await page.getByRole('button', { name: '1 条注释', exact: true }).hover();
+  const hoverAppearance = await chipAppearance();
+  assert.equal(hoverAppearance.color, idleAppearance.color, 'Hovering the chip must keep the label neutral instead of blue');
+  assert.equal(hoverAppearance.closeOpacity, '1');
+  assert.ok(['round', 'superellipse(1)'].includes(hoverAppearance.closeCorner), 'Host corner-shape must not turn the close circle into a squircle');
+  await measureControl('chip-hover', '.dca-dock .dca-batch-chip');
+  uiMeasurements['chip-appearance'] = { idle: idleAppearance, hover: hoverAppearance };
   await measureControl('annotations', '.dca-annotations');
   assert.equal(uiMeasurements.annotations.width, 384);
   assert.equal(uiMeasurements.annotations.height, 143);
@@ -274,11 +292,13 @@ try {
   assert.notEqual(darkPanel, uiMeasurements.editor.background);
   uiMeasurements.darkBackground = darkPanel;
   await page.getByRole('button', { name: '保存', exact: true }).click();
+  await page.mouse.move(1200, 100); await measureControl('chip-dark', '.dca-dock .dca-batch-chip');
   await page.setViewportSize({ width: 480, height: 860 }); await page.locator('[data-dca-marker]').last().click();
   const box = await page.locator('.dca-editor').boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= 480);
   await screenshots('07-narrow'); await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme: 'light' });
   // Detaching is an explicit send decision and must survive subsequent typing.
+  await page.locator('.dca-dock .dca-batch-chip').hover();
   await page.getByRole('button', { name: '取消附加批注', exact: true }).click();
   await input.click(); await page.keyboard.insertText('不带批注的草稿');
   assert.ok(!await input.innerText().then(t => /@\s*批注/.test(t)));
