@@ -2,6 +2,8 @@
 
 在 DeepSeek Harness 的助手原文旁添加批注，以 Codex 的选区交互为参考：选择文字 → **添加到对话** → 蓝色编号 → **添加可选评论…** → 随下一条消息发送。
 
+项目仓库：[deepseek-harness-plugins/dsh-codex-annotations](https://github.com/deepseek-harness-plugins/dsh-codex-annotations)。
+
 ![划选后的紧凑批注框](docs/assets/compact-editor.png)
 
 ![编辑批注](docs/assets/inline-comment.png)

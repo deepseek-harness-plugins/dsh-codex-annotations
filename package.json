@@ -7,7 +7,7 @@
   "main": "lib/index.js",
   "exports": { ".": "./lib/index.js", "./client": "./lib/client.js" },
   "files": ["lib", "cordis.patch.yml", "README.md", "LICENSE", "docs"],
-  "repository": { "type": "git", "url": "https://github.com/deepseekharness-plugin/dsh-codex-annotations.git" },
+  "repository": { "type": "git", "url": "https://github.com/deepseek-harness-plugins/dsh-codex-annotations.git" },
   "keywords": ["dsh", "dsh-plugins", "deepseek-harness", "annotations", "codex"],
   "engines": { "node": ">=22.19.0", "dsh": ">=0.2.0-rc.2" },
   "dsh": {
