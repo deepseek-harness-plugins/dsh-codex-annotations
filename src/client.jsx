@@ -188,22 +188,29 @@ export function apply(ctx) {
   document.head.append(style);
   ctx.effect(() => () => { runtime.dispose(); style.remove(); });
   ctx.effect(() => ctx.inputTriggers.registerSource(runtime.source));
-  const decorated = new WeakSet(), restores = [];
+  const decorated = new WeakSet(), registrations = new Map();
   const decorate = () => {
-    for (const entry of ctx.slots.entries('conversation.chat.node')) {
+    const entries = ctx.slots.entries('conversation.chat.node');
+    for (const [entry, release] of registrations) if (!entries.includes(entry)) { registrations.delete(entry); release(); }
+    for (const entry of entries) {
       const Wrapper = entry.options.key === 'assistant-step' ? Assistant : ['user', 'steering'].includes(entry.options.key) ? User : null;
-      if (!Wrapper || decorated.has(entry.component)) continue;
-      const original = entry.component, originalInject = entry.inject;
-      function AnnotatedNode(props) { return <Wrapper {...props} inner={original}/>; }
-      decorated.add(AnnotatedNode); entry.component = AnnotatedNode;
-      entry.inject = (...args) => ({ ...originalInject?.(...args), dca: runtime.faceFor(args[0]) });
-      const inject = entry.inject;
-      restores.push(() => { if (entry.component === AnnotatedNode) entry.component = original; if (entry.inject === inject) entry.inject = originalInject; });
+      if (!Wrapper || decorated.has(entry.component) || registrations.has(entry)) continue;
+      const original = entry.component;
+      function AnnotatedNode(props) { return <Wrapper {...props} dca={runtime.faceFor(props.sessionId)} inner={original}/>; }
+      decorated.add(AnnotatedNode);
+      // The renderer caches injection by entry identity. Mutating an already
+      // mounted native entry leaves stale props and can abdicate its renderer.
+      // A separate priority entry keeps native registration/cache untouched.
+      registrations.set(entry, () => {});
+      const release = ctx.slots.register({ name: 'conversation.chat.node', ...entry.options,
+        priority: (entry.options.priority ?? 0) - 1, inject: entry.inject, locale: entry.locale,
+        store: entry.store }, AnnotatedNode);
+      registrations.set(entry, release);
     }
   };
   ctx.slots.inject('conversation.chat.node', () => {
     decorate(); const off = ctx.on('slots/changed', name => { if (name === 'conversation.chat.node') decorate(); });
-    return () => { off(); for (const restore of restores.reverse()) restore(); };
+    return () => { off(); for (const release of [...registrations.values()].reverse()) release(); registrations.clear(); };
   });
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({ name: 'conversation.input.dock', id: 'dsh-codex-annotations', order: -25,
     inject: sessionId => ({ dca: runtime.faceFor(sessionId) }) }, Dock));

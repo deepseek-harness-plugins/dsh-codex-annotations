@@ -17,7 +17,7 @@ await mkdir(workspace); await mkdir(artifacts, { recursive: true });
 await symlink(project, join(profile, 'node_modules/@deepseekharness-plugin/dsh-codex-annotations'));
 await writeFile(join(profile, 'package.json'), JSON.stringify({ name: 'dca-host-test', private: true,
   dependencies: { '@deepseekharness-plugin/dsh-codex-annotations': `link:${project}` },
-  dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseekharness-plugin/dsh-codex-annotations'] } } }));
+  dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] } } }));
 await writeFile(join(profile, 'cordis.yml'), '[]');
 await writeFile(join(profile, 'cordis.patch.yml'), JSON.stringify([{ id: 'ui-settings-general', config: { welcomeNoticeVersion: '2026-09-28.1' } }]));
 const patch = join(root, 'test.patch.yml'), capturePath = join(artifacts, 'model-request.json');
@@ -89,6 +89,12 @@ try {
   if (!await page.getByText('这个插件会把', { exact: false }).count()) {
     await rows.filter({ hasText: '未命名' }).first().click();
   }
+  // Enable against an already rendered conversation: cold boot misses the
+  // host's retained per-entry injection cache and cannot catch that regression.
+  assert.match(await page.locator('[data-chat-flow-kind="assistant-step"]').first().innerText(), /这个插件/);
+  await page.getByRole('button', { name: '插件', exact: true }).click();
+  await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
+  await rows.filter({ hasText: '批注交互预览' }).click();
   const body = page.locator('[data-dca-content]').first(); await body.waitFor();
   assert.match(await body.innerText(), /这个插件/);
   const select = async text => {
