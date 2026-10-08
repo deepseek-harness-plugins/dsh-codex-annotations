@@ -304,19 +304,36 @@ try {
   assert.equal(decoded.payloads[0].annotations[0].comment, '测试1');
   assert.equal(decoded.payloads[0].annotations[1].comment, '');
   assert.equal(await page.locator('[data-dca-dock]').count(), 0);
+  await page.locator('[data-dca-marker]').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('.dca-highlight').count(), 0, 'Sent notes must not paint permanent source highlights');
   assert.equal(await page.locator('.dca-sent-pills .dca-batch-chip').count(), 1);
   assert.equal(await page.getByText('[DSH_ANNOTATIONS_V1:', { exact: false }).count(), 0);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.dca-sent-pills .dca-batch-chip').waitFor();
+  assert.equal(await page.locator('[data-dca-marker]').count(), 0, 'Refresh must not restore sent source markers');
+  assert.equal(await page.locator('.dca-highlight').count(), 0, 'Refresh must not restore sent source highlights');
+  await screenshots('16-sent-idle-without-source-marks');
   await page.locator('.dca-sent-pills .dca-batch-chip').first().hover(); await page.locator('.dca-annotations').waitFor();
   assert.equal(await page.locator('.dca-annotation').count(), 2);
   await page.locator('.dca-quote').first().click();
   assert.equal(await page.locator('.dca-float').count(), 0, 'Sent quote navigation must close its details card');
-  await page.waitForFunction(() => {
-    const marks = [...document.querySelectorAll('.dca-highlight.dca-sent')];
-    const first = marks[0].getBoundingClientRect(), pane = marks[0].closest('[data-conversation-scroll]');
-    return first.top > pane.getBoundingClientRect().top + 36 && first.bottom < pane.querySelector('[data-composer-seat]').getBoundingClientRect().top - 12;
-  });
+  const assertSentSelection = async () => {
+    await page.waitForFunction(quote => {
+      const selection = window.getSelection();
+      if (selection?.toString() !== quote || !selection.rangeCount) return false;
+      const range = selection.getRangeAt(0), rect = range.getBoundingClientRect();
+      const pane = range.startContainer.parentElement.closest('[data-conversation-scroll]');
+      return rect.top > pane.getBoundingClientRect().top + 36 && rect.bottom < pane.querySelector('[data-composer-seat]').getBoundingClientRect().top - 12;
+    }, referenceQuote);
+    assert.equal(await page.locator('[data-dca-marker],.dca-highlight,.dca-float').count(), 0, 'Sent navigation must only select the source text');
+  };
+  await assertSentSelection();
+  await screenshots('17-sent-source-selection');
+  await input.click();
+  assert.notEqual(await page.evaluate(() => window.getSelection()?.toString()), referenceQuote, 'Clicking elsewhere must clear the sent source selection');
   await page.locator('.dca-sent-pills .dca-batch-open').first().click();
   assert.equal(await page.locator('.dca-float').count(), 0, 'Clicking a sent annotation chip must jump without opening a popup');
+  await assertSentSelection();
   await select('const greeting = "你好🙂";\nconsole.log(greeting);');
   await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.getByRole('textbox', { name: '批注 3 的可选评论', exact: true }).click();
@@ -351,8 +368,9 @@ try {
   await page.getByRole('button', { name: '删除全部待发送批注', exact: true }).click();
   await page.locator('[data-dca-dock]').waitFor({ state: 'hidden' });
   await page.locator('.dca-marker').filter({ hasText: '3' }).waitFor({ state: 'hidden' });
-  assert.equal(await page.locator('.dca-highlight:not(.dca-sent)').count(), 0);
-  assert.deepEqual(await page.locator('[data-dca-marker]').allTextContents(), ['1','2']);
+  assert.equal(await page.locator('.dca-highlight').count(), 0);
+  assert.deepEqual(await page.locator('[data-dca-marker]').allTextContents(), []);
+  assert.equal(await page.locator('.dca-sent-pills .dca-batch-chip').count(), 1);
   assert.equal(await page.locator('.dca-float').count(), 0);
   assert.equal(await page.getByRole('alertdialog').count(), 0);
   assert.equal(await input.locator('[data-composer-chip="dsh-codex-annotations"]').count(), 0);
@@ -442,7 +460,7 @@ try {
   assert.deepEqual(consoleErrors, []);
   await writeFile(join(artifacts, 'ui-measurements.json'), JSON.stringify(uiMeasurements, null, 2));
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: '0.2.0-rc.2', isolatedHome: home, errors, acceptedUser: last,
-    checks: ['enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
+    checks: ['sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {
   if (page) { await screenshots('failure'); console.error(await page.locator('body').innerText()); }

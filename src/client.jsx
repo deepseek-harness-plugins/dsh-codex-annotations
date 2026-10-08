@@ -94,7 +94,7 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
   const view = snapshot(face.store);
   const [selection, setSelection] = useState(null), [open, setOpen] = useState(null), [layout, setLayout] = useState([]);
   const nodeKey = String(props.node.key);
-  const notes = view.annotations.filter(a => a.nodeKey === nodeKey);
+  const notes = view.annotations.filter(a => a.nodeKey === nodeKey && a.status === 'pending');
   const selected = () => {
     if (!source.current) return;
     const current = window.getSelection(); if (!current?.rangeCount || current.isCollapsed) return;
@@ -146,8 +146,13 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
       if (!range) { face.report('原文已变化，无法准确定位；批注原文仍保留。'); return; }
       const editing = event.type === 'dca:edit' && note.status !== 'sent';
       setSelection(null); setOpen(editing ? { kind: 'edit', note, reveal: true } : null);
+      const current = window.getSelection();
+      current?.removeAllRanges();
       revealQuote(root.current, range, { spaceAbove: editing ? 100 : 36,
         behavior: editing || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      // Sent notes live in the message chip. A normal selection shows the
+      // requested source only until the user clicks elsewhere or selects again.
+      if (note.status === 'sent') { current?.addRange(range); return; }
       root.current.classList.add('dca-flash');
       clearTimeout(timer); timer = setTimeout(() => root.current?.classList.remove('dca-flash'), 1200);
     };
@@ -161,9 +166,9 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
     <div ref={source} data-dca-content="" onPointerUp={() => setTimeout(selected, 0)} onKeyUp={selected}><Inner {...props}/></div>
     <div className="dca-layer" data-dca-ui="">
       {layout.map(({ note, paint, path, left, top }) => <React.Fragment key={note.id}>
-        <svg data-dca-highlight={note.id} className={`dca-highlight ${note.status === 'sent' ? 'dca-sent' : ''}`} style={paint} viewBox={`0 0 ${paint.width} ${paint.height}`} aria-hidden="true"><path d={path} fillRule="nonzero"/></svg>
-        <button className="dca-marker" data-dca-marker={note.id} style={{ left, top }} aria-label={`批注 ${note.number}，${note.status === 'sent' ? '已发送' : '待发送'}`}
-          onClick={() => { setSelection(null); setOpen({ kind: note.status === 'sent' ? 'details' : 'edit', note }); }}>{note.number}</button>
+        <svg data-dca-highlight={note.id} className="dca-highlight" style={paint} viewBox={`0 0 ${paint.width} ${paint.height}`} aria-hidden="true"><path d={path} fillRule="nonzero"/></svg>
+        <button className="dca-marker" data-dca-marker={note.id} style={{ left, top }} aria-label={`批注 ${note.number}，待发送`}
+          onClick={() => { setSelection(null); setOpen({ kind: 'edit', note }); }}>{note.number}</button>
       </React.Fragment>)}
     </div>
     {selection && !open && <Float anchor={anchor} className="dca-menu" onDismiss={close}>
