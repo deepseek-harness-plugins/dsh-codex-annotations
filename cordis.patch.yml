@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-codex-annotations
+      name: '@deepseekharness-plugin/dsh-codex-annotations'

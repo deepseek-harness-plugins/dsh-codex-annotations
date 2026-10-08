@@ -1,0 +1,27 @@
+{
+  "name": "@deepseekharness-plugin/dsh-codex-annotations",
+  "version": "0.1.0",
+  "description": "Codex 风格的原文批注：选区菜单、编号锚点、可选评论和原生引用发送",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./client": "./lib/client.js" },
+  "files": ["lib", "cordis.patch.yml", "README.md", "LICENSE", "docs"],
+  "repository": { "type": "git", "url": "https://github.com/deepseekharness-plugin/dsh-codex-annotations.git" },
+  "keywords": ["dsh", "dsh-plugins", "deepseek-harness", "annotations", "codex"],
+  "engines": { "node": ">=22.19.0", "dsh": ">=0.2.0-rc.2" },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-client-ui-chat", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-input-trigger"]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/core.test.mjs",
+    "check": "npm run build && npm test",
+    "test:host": "node scripts/host-test.mjs"
+  },
+  "devDependencies": { "esbuild": "0.25.10", "playwright": "1.56.0" }
+}
