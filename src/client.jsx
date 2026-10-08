@@ -213,7 +213,13 @@ export function apply(ctx) {
       const Wrapper = name === 'conversation.input.attachments' ? Attachments : entry.options.key === 'assistant-step' ? Assistant : ['user', 'steering'].includes(entry.options.key) ? User : null;
       if (!Wrapper || decorated.has(entry.component) || registrations.has(entry)) continue;
       const original = entry.component;
-      function AnnotatedNode(props) { return <Wrapper {...props} dca={props.sessionId === undefined ? null : runtime.faceFor(props.sessionId)} inner={original}/>; }
+      function AnnotatedNode(props) {
+        // DSH presents reasoning and response separately with the same node key.
+        // Only the response owns quote navigation; the folded reasoning seat
+        // otherwise reports a false missing-quote warning alongside the editor.
+        if (Wrapper === Assistant && props.groupPart === 'reasoning') return React.createElement(original, props);
+        return <Wrapper {...props} dca={props.sessionId === undefined ? null : runtime.faceFor(props.sessionId)} inner={original}/>;
+      }
       decorated.add(AnnotatedNode);
       // The renderer caches injection by entry identity. Mutating an already
       // mounted native entry leaves stale props and can abdicate its renderer.

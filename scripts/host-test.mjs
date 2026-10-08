@@ -32,7 +32,7 @@ const fixtureText = '这个插件会把选中的原文和你的评论随下一�
 const sourceDir = join(home, 'sessions', '-' + workspace.replaceAll('/', '-') + '--');
 for (const [id, title, text] of [['dca-preview', '批注交互预览', fixtureText], ['dca-other', '另一会话', '这是另一个会话，批注应相互独立。']]) {
   const sessionDir = join(sourceDir, 'session-' + id); await mkdir(sessionDir, { recursive: true });
-  const now = Date.now(), block = { type: 'text', text };
+  const now = Date.now(), block = { type: 'text', text }, reasoning = { type: 'reasoning', text: '这是折叠的思考过程。' };
   const events = [
     { type: 'permission/preset', data: { preset: 'workspace-write' } },
     { type: 'sandbox/mode', data: { mode: 'workspace-write' } },
@@ -40,10 +40,13 @@ for (const [id, title, text] of [['dca-preview', '批注交互预览', fixtureTe
     { type: 'turn/start', data: { turn: 1 } }, { type: 'step/start', data: { turn: 1, step: 1 } },
     { type: 'user/message', surfaceOp: 'append', data: { role: 'user', id: id + '-user', content: [{ type: 'text', text: title }], source: { kind: 'user' } } },
     { type: 'session/title', data: { title, messageSeqs: [5], source: { kind: 'fallback' } } },
-    { type: 'assistant/message', surfaceOp: 'append', data: { turn: 1, step: 1, message: { role: 'assistant', id: id + '-assistant', content: [block], source: { kind: 'model', provider: 'dca-fixture', model: 'fixture' } }, stream: [
-      { type: 'chunk', time: 7, chunk: { type: 'block-start', index: 0, blockType: 'text' } },
-      { type: 'text-chunks', time0: 7, index: 0, dt: [], texts: [text] },
-      { type: 'chunk', time: 7, chunk: { type: 'block-end', index: 0, block } },
+    { type: 'assistant/message', surfaceOp: 'append', data: { turn: 1, step: 1, message: { role: 'assistant', id: id + '-assistant', content: [reasoning, block], source: { kind: 'model', provider: 'dca-fixture', model: 'fixture' } }, stream: [
+      { type: 'chunk', time: 7, chunk: { type: 'block-start', index: 0, blockType: 'reasoning' } },
+      { type: 'text-chunks', time0: 7, index: 0, dt: [], texts: [reasoning.text] },
+      { type: 'chunk', time: 7, chunk: { type: 'block-end', index: 0, block: reasoning } },
+      { type: 'chunk', time: 7, chunk: { type: 'block-start', index: 1, blockType: 'text' } },
+      { type: 'text-chunks', time0: 7, index: 1, dt: [], texts: [text] },
+      { type: 'chunk', time: 7, chunk: { type: 'block-end', index: 1, block } },
       { type: 'chunk', time: 7, chunk: { type: 'finish', reason: { kind: 'stop' } } }
     ] } },
     { type: 'step/end', data: { turn: 1, step: 1 } }, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
@@ -91,13 +94,13 @@ try {
   let target = rows.filter({ hasText: '批注交互预览' });
   if (!await target.count()) target = rows.filter({ hasText: '未命名' }).last();
   await target.click();
-  await page.locator('[data-chat-flow-kind="assistant-step"]').waitFor();
+  await page.locator('[data-chat-flow-kind="assistant-step"][data-chat-group-part="response"]').waitFor();
   if (!await page.getByText('这个插件会把', { exact: false }).count()) {
     await rows.filter({ hasText: '未命名' }).first().click();
   }
   // Enable against an already rendered conversation: cold boot misses the
   // host's retained per-entry injection cache and cannot catch that regression.
-  assert.match(await page.locator('[data-chat-flow-kind="assistant-step"]').first().innerText(), /这个插件/);
+  assert.match(await page.locator('[data-chat-flow-kind="assistant-step"][data-chat-group-part="response"]').first().innerText(), /这个插件/);
   await page.getByRole('button', { name: '插件', exact: true }).click();
   await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
   await rows.filter({ hasText: '批注交互预览' }).click();
@@ -159,6 +162,9 @@ try {
   await screenshots('11-composer-annotations');
   await page.locator('.dca-annotations').getByRole('button', { name: '编辑批注 1', exact: true }).click();
   assert.equal(await comment.inputValue(), '测试1', 'Popup pencil must edit the saved comment');
+  assert.equal(await page.getByText('原文已变化，无法准确定位；批注原文仍保留。', { exact: true }).count(), 0, 'Folded reasoning must not handle a response quote');
+  assert.equal(await page.locator('[data-chat-group-part="reasoning"] .dca-source').count(), 0);
+  assert.ok(await page.locator('[data-chat-group-part="response"] .dca-source').count() > 0);
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await select('连续添加多条批注'); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await page.getByRole('textbox', { name: '批注 2 的可选评论', exact: true }).click();

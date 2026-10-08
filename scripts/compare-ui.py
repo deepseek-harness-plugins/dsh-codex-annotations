@@ -27,7 +27,7 @@ small = ImageFont.truetype(font_path, 18)
 title = ImageFont.truetype(font_path, 30)
 canvas = Image.new("RGB", (2560, 1600), "#f6f7f9")
 draw = ImageDraw.Draw(canvas)
-draw.text((24, 20), "Codex / dsh 0.2.0：三种状态逐像素对照", font=title, fill="#17191d")
+draw.text((24, 20), "Codex / dsh 0.2.1：三种状态逐像素对照", font=title, fill="#17191d")
 draw.text((24, 65), "参考按 2x 推定，dsh 为 Chrome DPR=2；原尺寸裁切，对齐左上角，无缩放。", font=small, fill="#5e636c")
 for x, label in [(180, "Codex 参考"), (990, "dsh 原生渲染"), (1800, "逐像素差值：越亮表示差异越大")]:
     draw.text((x, 112), label, font=font, fill="#17191d")
