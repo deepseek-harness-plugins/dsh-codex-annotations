@@ -126,7 +126,7 @@ try {
     }, text);
     await page.getByRole('button', { name: '添加到对话', exact: true }).waitFor();
   };
-  const assertSentLayout = async (index, name) => {
+  const assertSentLayout = async (index, name, annotationOnly = false) => {
     const row = page.locator('.dca-user-message').nth(index);
     await row.scrollIntoViewIfNeeded();
     const layout = await row.evaluate(el => {
@@ -134,15 +134,23 @@ try {
       const actions = native.querySelector('[data-clock="start"]');
       const rect = element => { const r = element.getBoundingClientRect(); return { top:r.top, bottom:r.bottom, right:r.right }; };
       const lastButton = [...el.querySelectorAll('button')].at(-1);
-      return { header:rect(header), native:rect(native), actions:rect(actions),
+      const flow = el.closest('[data-chat-flow-key]');
+      let previous = flow.previousElementSibling;
+      while (previous && (!previous.getBoundingClientRect().height || previous.hidden)) previous = previous.previousElementSibling;
+      return { header:rect(header), native:rect(native), actions:rect(actions), paddingTop:getComputedStyle(el).paddingTop,
+        precedingGap:previous ? header.getBoundingClientRect().top - previous.getBoundingClientRect().bottom : null,
         nativeActionsLast:actions.contains(lastButton), radius:getComputedStyle(header.querySelector('.dca-batch-chip')).borderRadius };
     });
     assert.ok(layout.header.bottom <= layout.native.top, 'Sent annotations must precede the native message bubble');
     assert.ok(layout.actions.top >= layout.native.top, 'The native action bar remains below the message');
     assert.ok(layout.nativeActionsLast, 'No plugin control may follow the native message actions');
     assert.equal(layout.radius, '999px');
+    assert.equal(layout.paddingTop, annotationOnly ? '16px' : '0px', 'Only an annotation-only message adds top breathing room');
     await writeFile(join(artifacts, `${name}.json`), JSON.stringify(layout, null, 2));
     await row.screenshot({ path:join(artifacts, `${name}.png`), scale:'css' });
+    const box = await row.boundingBox(), top = Math.max(0, box.y - 70);
+    await page.screenshot({ path:join(artifacts, `${name}-context.png`), scale:'css',
+      clip:{ x:box.x, y:top, width:box.width, height:box.y + box.height + 12 - top } });
   };
   const assertQuoteVisible = async (number, editing = false) => {
     const marker = page.getByRole('button', { name: `批注 ${number}，待发送`, exact: true });
@@ -490,7 +498,7 @@ try {
   await page.getByRole('button', { name:'添加到对话', exact:true }).click();
   await page.keyboard.press('Escape'); await input.press('Enter');
   await page.locator('.dca-user-message').nth(3).waitFor();
-  await assertSentLayout(3, 'annotation-only-message-layout');
+  await assertSentLayout(3, 'annotation-only-message-layout', true);
   await page.getByRole('button', { name: '插件', exact: true }).click();
   await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
   await rows.filter({ hasText: '批注交互预览' }).click();

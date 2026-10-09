@@ -48,6 +48,7 @@
 .dca-muted { opacity:.5; }
 [data-composer-chip="dsh-codex-annotations"] { display:none; }
 .dca-notice { border:1px solid #df8166;border-radius:12px;padding:8px 12px;color:var(--dsw-alias-label-primary,#333);display:flex;align-items:center;gap:8px;font-size:13px; }.dca-notice span { flex:1; }.dca-notice button { border:0;background:transparent;cursor:pointer;color:inherit; }
+.dca-user-message-annotations-only { padding-top:16px; }
 .dca-sent-pills { display:flex;justify-content:flex-end;margin-bottom:8px; }
 .dca-sent-pills .dca-batch-chip { border-radius:999px; }
 @media (prefers-reduced-motion:no-preference) { .dca-source.dca-flash .dca-highlight { animation:dca-flash 1s ease; } @keyframes dca-flash { 0%,100%{fill:rgba(57,160,255,.48)}50%{fill:rgba(57,160,255,.7)} } }
