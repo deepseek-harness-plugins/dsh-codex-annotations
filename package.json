@@ -21,6 +21,7 @@
     "build": "node scripts/build.mjs",
     "test": "node --test tests/core.test.mjs",
     "check": "npm run build && npm test",
+    "screenshots": "npm run build && node scripts/capture-readme.mjs",
     "test:host": "node scripts/host-test.mjs"
   },
   "devDependencies": { "esbuild": "0.25.10", "playwright": "1.56.0" }

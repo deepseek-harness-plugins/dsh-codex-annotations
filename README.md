@@ -4,14 +4,16 @@ DeepSeek Harness 的 Codex 风格批注插件：选择助手原文、添加评�
 
 ## 效果
 
+以下均为 0.2.10 实际界面的 2 倍像素截图，点击可查看原图。
+
 | 场景 | 展示 |
 | --- | --- |
-| 添加批注 | <img src="docs/assets/readme-add.png" width="640" alt="选区高亮与编号"> |
-| 编辑评论 | <img src="docs/assets/readme-edit.png" width="640" alt="编辑、取消、保存评论"> |
-| 查看批注 | <img src="docs/assets/readme-list.png" width="380" alt="查看原文、评论及编辑入口"> |
-| 随消息发送 | <img src="docs/assets/readme-sent-message.png" width="640" alt="批注入口在消息气泡上方，原生操作栏在下方"> |
-| 仅发送批注 | <img src="docs/assets/readme-annotation-only.png" width="640" alt="独立批注消息的顶部留白和下方操作栏"> |
-| 发送后跳转 | <img src="docs/assets/readme-sent.png" width="640" alt="点击消息批注，跳回原文高亮"> |
+| 添加批注 | <a href="docs/assets/readme-add.png"><img src="docs/assets/readme-add.png" width="760" alt="原文选区、蓝色编号、可选评论框与聊天框"></a> |
+| 编辑评论 | <a href="docs/assets/readme-edit.png"><img src="docs/assets/readme-edit.png" width="760" alt="原文旁编辑评论，显示删除、取消、保存按钮"></a> |
+| 查看批注 | <a href="docs/assets/readme-list.png"><img src="docs/assets/readme-list.png" width="760" alt="在聊天框悬停批注入口，查看完整原文与评论"></a> |
+| 随消息发送 | <a href="docs/assets/readme-sent-message.png"><img src="docs/assets/readme-sent-message.png" width="760" alt="批注入口在消息气泡上方，原生操作栏在下方"></a> |
+| 仅发送批注 | <a href="docs/assets/readme-annotation-only.png"><img src="docs/assets/readme-annotation-only.png" width="760" alt="独立批注消息、上方会话内容及下方操作栏"></a> |
+| 发送后跳转 | <a href="docs/assets/readme-sent.png"><img src="docs/assets/readme-sent.png" width="760" alt="点击气泡上方的注释入口，返回原文，只显示选区高亮"></a> |
 
 ## 安装
 
@@ -43,8 +45,9 @@ Node.js 24+：
 npm ci
 npm run check
 npm run test:host
+npm run screenshots
 ```
 
-`test:host` 使用隔离配置和本地测试模型。更多细节见 [验证记录](docs/verification.md) 和 [UI 对照](docs/ui-comparison.md)。
+`test:host` 和 `screenshots` 使用隔离配置和本地测试模型；后者更新上面的六张效果图。更多细节见 [验证记录](docs/verification.md) 和 [UI 对照](docs/ui-comparison.md)。
 
 [MIT License](LICENSE)
