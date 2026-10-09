@@ -1,7 +1,8 @@
 import { build } from 'esbuild';
-import { mkdir, copyFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 await mkdir('lib', { recursive: true });
-await copyFile('src/index.js', 'lib/index.js');
+await build({ entryPoints: ['src/index.js'], bundle: true, outfile: 'lib/index.js',
+  format: 'esm', platform: 'node', target: 'node22', legalComments: 'none' });
 const result = await build({ entryPoints: ['src/client.jsx'], bundle: true, write: false,
   format: 'cjs', platform: 'browser', target: 'chrome130', external: ['react', 'react-dom'],
   jsx: 'transform', minify: false, legalComments: 'none', loader: { '.css': 'text' } });

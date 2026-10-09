@@ -25,9 +25,11 @@ await writeFile(patch, JSON.stringify([
   ...['llm-deepseek', 'llm-pi-ai', 'session-title-llm'].map(id => ({ id, disabled: true })),
   { id: 'session-persistence-jsonl', config: { compression: 'none', root: join(home, 'sessions') } },
   { id: 'agent-default-model', config: { provider: 'dca-fixture', model: 'fixture' } },
+  { id: 'compaction-basic', config: { retainTokens: 0 } },
   { insert: [{ id: 'dca-fixture', name: pathToFileURL(join(project, 'tests/mock-model.mjs')).href }] }
 ]));
 const referenceQuote = '失的是助手回答正文，用量数字还在。这和刚才启用插件时出现的显示问题一致；我先检查你现在的窗';
+const modelNotes = text => [...text.matchAll(/\[用户批注\]\n[^\n]*\n([^\n]*)\n\[\/用户批注\]/g)].flatMap(match => JSON.parse(match[1]));
 const linkedQuote = '链接前文 dsh-annotation 和 dsh-sidenote，包含 Annotations ×N 与加粗文本。';
 const fixtureText = '这个插件会把选中的原文和你的评论随下一条消息一起发给模型。你可以连续添加多条批注，并随时返回原文查看。\n\n```js\nconst greeting = "你好🙂";\nconsole.log(greeting);\n```\n\n| 功能 | 状态 |\n| --- | --- |\n| 空评论 | 支持 |\n| 多条批注 | 支持 |\n\n'
   + '链接前文 [dsh-annotation](https://github.com/omdsh-dev/dsh-annotation) 和 [dsh-sidenote](https://github.com/g-yixuan/dsh-sidenote)，包含 `Annotations ×N` 与**加粗文本**。\n\n'
@@ -296,13 +298,20 @@ try {
   assert.match(await input.innerText(), /请按批注修改。 Keep English\./);
   await input.press('Enter'); await page.getByText('本地测试已收到批注与用户要求。', { exact: true }).waitFor();
   await screenshots('05-sent-annotations');
-  const messages = JSON.parse(await readFile(capturePath, 'utf8')), last = messages.filter(m => m.role === 'user' && m.content?.some(b => b.type === 'text' && decodeText(b.text).payloads.length)).at(-1);
-  const text = last.content.filter(b => b.type === 'text').map(b => b.text).join(''); const decoded = decodeText(text);
-  assert.match(decoded.text, /请按批注修改。 Keep English\./);
-  assert.equal(decoded.payloads.length, 1); assert.equal(decoded.payloads[0].annotations.length, 2);
-  assert.equal(decoded.payloads[0].annotations[0].quote, referenceQuote);
-  assert.equal(decoded.payloads[0].annotations[0].comment, '测试1');
-  assert.equal(decoded.payloads[0].annotations[1].comment, '');
+  const messages = JSON.parse(await readFile(capturePath, 'utf8')), last = messages.filter(m => m.role === 'user' && m.content?.some(b => b.type === 'text' && modelNotes(b.text).length)).at(-1);
+  const text = last.content.filter(b => b.type === 'text').map(b => b.text).join(''), projectedNotes = modelNotes(text);
+  assert.match(text, /请按批注修改。 Keep English\./);
+  assert.deepEqual(projectedNotes, [{ number: 1, quote: referenceQuote, comment: '测试1' }, { number: 2, quote: '连续添加多条批注' }]);
+  for (const field of ['DSH_ANNOTATIONS_V1', 'nodeKey', 'prefix', 'suffix', 'revision', 'sessionId']) assert.ok(!text.includes(field), field + ' must stay out of model annotations');
+  const durableEvents = (await readFile(join(sourceDir, 'session-dca-preview/session.v4.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
+  const durable = durableEvents.filter(e => e.type === 'user/message').map(e => e.data).find(m => m.id === last.id);
+  const rawPayload = durable.content.flatMap(b => b.type === 'text' ? decodeText(b.text).payloads : [])[0];
+  assert.equal(rawPayload.annotations.length, 2);
+  assert.equal(rawPayload.annotations[0].quote, referenceQuote);
+  assert.equal(typeof rawPayload.annotations[0].nodeKey, 'string');
+  assert.equal(typeof rawPayload.annotations[0].prefix, 'string');
+  assert.equal(typeof rawPayload.annotations[0].id, 'string');
+  assert.equal(typeof rawPayload.annotations[0].revision, 'number');
   assert.equal(await page.locator('[data-dca-dock]').count(), 0);
   await page.locator('[data-dca-marker]').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('.dca-highlight').count(), 0, 'Sent notes must not paint permanent source highlights');
@@ -404,10 +413,10 @@ try {
   await page.locator('.dca-sent-pills .dca-batch-chip').nth(1).waitFor();
   await screenshots('08-native-files');
   const withFiles = JSON.parse(await readFile(capturePath, 'utf8'));
-  const codeMessage = withFiles.find(m => m.content?.some(b => b.type === 'text' && decodeText(b.text).payloads.some(p => p.annotations.some(a => a.number === 3))));
-  assert.ok(codeMessage); const codePayload = codeMessage.content.flatMap(b => b.type === 'text' ? decodeText(b.text).payloads : [])[0];
-  assert.equal(codePayload.annotations[0].quote, 'const greeting = "你好🙂";\nconsole.log(greeting);');
-  assert.equal(codePayload.annotations[0].comment, '代码注释\n保留中文与🙂');
+  const codeMessage = withFiles.find(m => m.content?.some(b => b.type === 'text' && modelNotes(b.text).some(a => a.number === 3)));
+  assert.ok(codeMessage); const codeNotes = codeMessage.content.flatMap(b => b.type === 'text' ? modelNotes(b.text) : []);
+  assert.equal(codeNotes[0].quote, 'const greeting = "你好🙂";\nconsole.log(greeting);');
+  assert.equal(codeNotes[0].comment, '代码注释\n保留中文与🙂');
   assert.ok(codeMessage.content.some(b => b.type === 'image'));
   assert.ok(codeMessage.content.some(b => b.type === 'file' || b.type === 'text' && b.text.includes('review.txt')));
   // Session scope must not carry pending references into another conversation.
@@ -456,10 +465,40 @@ try {
   await page.locator('[data-dca-marker]').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('[data-dca-marker]').count(), 0, 'Popup delete must remove its source marker');
   assert.equal(await page.locator('[data-dca-dock]').count(), 0, 'Deleting the last annotation must remove the chip');
+  // Exercise actual Cordis teardown and reactivation with retained historical notes.
+  await rows.filter({ hasText: '批注交互预览' }).click();
+  await page.getByRole('button', { name: '插件', exact: true }).click();
+  await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
+  await rows.filter({ hasText: '批注交互预览' }).click();
+  const replies = page.getByText('本地测试已收到批注与用户要求。', { exact: true });
+  const beforeDisableSend = await replies.count();
+  await input.click(); await page.keyboard.insertText('停用后验证原始上下文'); await input.press('Enter');
+  await replies.nth(beforeDisableSend).waitFor();
+  const disabledMessages = JSON.parse(await readFile(capturePath, 'utf8'));
+  assert.ok(disabledMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && decodeText(b.text).payloads.length)), 'Disabling must restore the original public history reader');
+  await page.getByRole('button', { name: '插件', exact: true }).click();
+  await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
+  await rows.filter({ hasText: '批注交互预览' }).click();
+  await page.locator('.dca-sent-pills .dca-batch-chip').nth(2).waitFor();
+  const beforeReenableSend = await replies.count();
+  await input.click(); await page.keyboard.insertText('再次启用验证历史批注'); await input.press('Enter');
+  await replies.nth(beforeReenableSend).waitFor();
+  const reenabledMessages = JSON.parse(await readFile(capturePath, 'utf8'));
+  assert.ok(reenabledMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && modelNotes(b.text).length)));
+  assert.ok(!reenabledMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && decodeText(b.text).payloads.length)), 'Reactivation must also slim retained historical annotations');
+  await screenshots('18-model-projection-history');
+  // The native compactor reads individual events rather than the cached history.
+  await input.click(); await page.keyboard.insertText('/compact'); await input.press('Enter');
+  await page.getByText(/^(已压缩 \d+ 条历史记录|Compacted \d+ history items)/).waitFor();
+  const compactionMessages = JSON.parse(await readFile(capturePath, 'utf8'));
+  assert.ok(compactionMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && modelNotes(b.text).length)), 'The native compaction request must include the complete projected notes');
+  assert.ok(!compactionMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && decodeText(b.text).payloads.length)), 'Compaction must omit UI anchoring fields too');
+  await writeFile(join(artifacts, 'compaction-model-request.json'), JSON.stringify(compactionMessages, null, 2));
   assert.deepEqual(errors, []);
   assert.deepEqual(consoleErrors, []);
   await writeFile(join(artifacts, 'ui-measurements.json'), JSON.stringify(uiMeasurements, null, 2));
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: '0.2.0-rc.2', isolatedHome: home, errors, acceptedUser: last,
+    modelProjection: { persistedUser: durable, projectedNotes, teardownRestored: true, reactivationProjectedHistory: true, compactionProjected: true },
     checks: ['sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {

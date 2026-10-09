@@ -13,7 +13,7 @@ DeepSeek Harness 的 Codex 风格批注插件：选择助手原文、添加评�
 
 ## 安装
 
-适用于 **DSH Desktop / Web 0.2.0-rc.2**，当前版本 **0.2.7**。
+适用于 **DSH Desktop / Web 0.2.0-rc.2**，当前版本 **0.2.8**。
 
 ```sh
 dsh plugin --profile desktop add 'github:deepseek-harness-plugins/dsh-codex-annotations#main'
@@ -30,6 +30,8 @@ dsh plugin --profile desktop add 'github:deepseek-harness-plugins/dsh-codex-anno
 悬停「N 条注释」查看、编辑或删除批注；点击原文可跳转。× 直接删除全部待发送批注。删除后新增批注会复用空缺编号。
 
 批注按会话保存。已发送批注只保留消息入口，点击后高亮原文，点击别处即消失。
+
+模型只收到批注编号、完整原文和评论；定位信息保存在会话中，用于回显和跳转。
 
 ## 开发
 
