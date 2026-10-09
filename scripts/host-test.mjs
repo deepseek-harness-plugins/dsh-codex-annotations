@@ -126,6 +126,24 @@ try {
     }, text);
     await page.getByRole('button', { name: '添加到对话', exact: true }).waitFor();
   };
+  const assertSentLayout = async (index, name) => {
+    const row = page.locator('.dca-user-message').nth(index);
+    await row.scrollIntoViewIfNeeded();
+    const layout = await row.evaluate(el => {
+      const header = el.querySelector('.dca-sent-pills'), native = header.nextElementSibling;
+      const actions = native.querySelector('[data-clock="start"]');
+      const rect = element => { const r = element.getBoundingClientRect(); return { top:r.top, bottom:r.bottom, right:r.right }; };
+      const lastButton = [...el.querySelectorAll('button')].at(-1);
+      return { header:rect(header), native:rect(native), actions:rect(actions),
+        nativeActionsLast:actions.contains(lastButton), radius:getComputedStyle(header.querySelector('.dca-batch-chip')).borderRadius };
+    });
+    assert.ok(layout.header.bottom <= layout.native.top, 'Sent annotations must precede the native message bubble');
+    assert.ok(layout.actions.top >= layout.native.top, 'The native action bar remains below the message');
+    assert.ok(layout.nativeActionsLast, 'No plugin control may follow the native message actions');
+    assert.equal(layout.radius, '999px');
+    await writeFile(join(artifacts, `${name}.json`), JSON.stringify(layout, null, 2));
+    await row.screenshot({ path:join(artifacts, `${name}.png`), scale:'css' });
+  };
   const assertQuoteVisible = async (number, editing = false) => {
     const marker = page.getByRole('button', { name: `批注 ${number}，待发送`, exact: true });
     const id = await marker.getAttribute('data-dca-marker');
@@ -319,6 +337,7 @@ try {
   assert.equal(await page.getByText('[DSH_ANNOTATIONS_V1:', { exact: false }).count(), 0);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.dca-sent-pills .dca-batch-chip').waitFor();
+  await assertSentLayout(0, 'sent-message-layout');
   assert.equal(await page.locator('[data-dca-marker]').count(), 0, 'Refresh must not restore sent source markers');
   assert.equal(await page.locator('.dca-highlight').count(), 0, 'Refresh must not restore sent source highlights');
   await screenshots('16-sent-idle-without-source-marks');
@@ -467,6 +486,11 @@ try {
   assert.equal(await page.locator('[data-dca-dock]').count(), 0, 'Deleting the last annotation must remove the chip');
   // Exercise actual Cordis teardown and reactivation with retained historical notes.
   await rows.filter({ hasText: '批注交互预览' }).click();
+  await select('这个插件会把选中的原文');
+  await page.getByRole('button', { name:'添加到对话', exact:true }).click();
+  await page.keyboard.press('Escape'); await input.press('Enter');
+  await page.locator('.dca-user-message').nth(3).waitFor();
+  await assertSentLayout(3, 'annotation-only-message-layout');
   await page.getByRole('button', { name: '插件', exact: true }).click();
   await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
   await rows.filter({ hasText: '批注交互预览' }).click();

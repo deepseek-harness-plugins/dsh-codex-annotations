@@ -223,9 +223,10 @@ function User({ inner: Inner, dca: face, ...props }) {
   });
   if (!payloads.length) return <Inner {...props}/>;
   const notes = payloads.flatMap(p => p.annotations).map(note => ({ ...note, status: 'sent' }));
-  return <div><Inner {...props} node={{ ...props.node, data: { ...props.node.data, content } }}/>
+  return <div className="dca-user-message">
     <div className="dca-sent-pills" data-dca-ui=""><div className="dca-batch-chip" data-dca-anchor="" {...popup.hover}><button ref={trigger} className="dca-batch-open" aria-label={`${notes.length} 条已发送注释`} aria-expanded={popup.expanded} onFocus={popup.open}
       onClick={() => { popup.close(); face.locate(notes[0]); }}>{icon('comment')}<span>{notes.length} 条注释</span></button></div></div>
+    <Inner {...props} node={{ ...props.node, data: { ...props.node.data, content } }}/>
     {popup.expanded && <AnnotationList notes={notes} face={face} editable={false} anchor={() => trigger.current.closest('.dca-batch-chip').getBoundingClientRect()} close={popup.close} hover={popup.hover}/>}
   </div>;
 }
