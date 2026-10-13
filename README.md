@@ -17,7 +17,7 @@ DeepSeek Harness 的 Codex 风格批注插件：选择助手原文、添加评�
 
 ## 安装
 
-适用于 **DSH Desktop / Web 0.2.0-rc.2**，当前版本 **0.2.10**。
+适用于 **DSH Desktop / Web 0.2.0-rc.2**，当前版本 **0.2.11**。插件列表显示为「原文批注」。
 
 ```sh
 dsh plugin --profile desktop add 'github:deepseek-harness-plugins/dsh-codex-annotations#main'

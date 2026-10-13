@@ -108,7 +108,7 @@ try {
   // host's retained per-entry injection cache and cannot catch that regression.
   assert.match(await page.locator('[data-chat-flow-kind="assistant-step"][data-chat-group-part="response"]').first().innerText(), /这个插件/);
   await page.getByRole('button', { name: '插件', exact: true }).click();
-  await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
+  await page.locator('[data-plugin-package="@deepseekharness-plugin/dsh-codex-annotations"]').getByRole('switch').click();
   await rows.filter({ hasText: '批注交互预览' }).click();
   const body = page.locator('[data-dca-content]').first(); await body.waitFor();
   assert.match(await body.innerText(), /这个插件/);
@@ -500,7 +500,7 @@ try {
   await page.locator('.dca-user-message').nth(3).waitFor();
   await assertSentLayout(3, 'annotation-only-message-layout', true);
   await page.getByRole('button', { name: '插件', exact: true }).click();
-  await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
+  await page.locator('[data-plugin-package="@deepseekharness-plugin/dsh-codex-annotations"]').getByRole('switch').click();
   await rows.filter({ hasText: '批注交互预览' }).click();
   const replies = page.getByText('本地测试已收到批注与用户要求。', { exact: true });
   const beforeDisableSend = await replies.count();
@@ -509,7 +509,7 @@ try {
   const disabledMessages = JSON.parse(await readFile(capturePath, 'utf8'));
   assert.ok(disabledMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && decodeText(b.text).payloads.length)), 'Disabling must restore the original public history reader');
   await page.getByRole('button', { name: '插件', exact: true }).click();
-  await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
+  await page.locator('[data-plugin-package="@deepseekharness-plugin/dsh-codex-annotations"]').getByRole('switch').click();
   await rows.filter({ hasText: '批注交互预览' }).click();
   await page.locator('.dca-sent-pills .dca-batch-chip').nth(2).waitFor();
   const beforeReenableSend = await replies.count();

@@ -86,7 +86,7 @@ try {
   await target.click();
   await page.locator('[data-chat-flow-kind="assistant-step"][data-chat-group-part="response"]').waitFor();
   await page.getByRole('button', { name: '插件', exact: true }).click();
-  await page.getByRole('switch', { name: '启用 @deepseekharness-plugin/dsh-codex-annotations', exact: true }).click();
+  await page.locator('[data-plugin-package="@deepseekharness-plugin/dsh-codex-annotations"]').getByRole('switch').click();
   target = rows.filter({ hasText: title });
   if (!await target.count()) target = rows.filter({ hasText: '未命名' }).first();
   await target.click();
