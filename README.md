@@ -17,13 +17,13 @@ DeepSeek Harness 的 Codex 风格批注插件：选择助手原文、添加评�
 
 ## 安装
 
-适用于 **DSH Desktop / Web 0.2.0-rc.2**，当前版本 **0.2.11**。插件列表显示为「原文批注」。
+适用于 **DSH Desktop / Web 0.2.1-rc.2**，当前版本 **0.2.12**。插件列表显示为「原文批注」。
 
 ```sh
 dsh plugin --profile desktop add 'github:deepseek-harness-plugins/dsh-codex-annotations#main'
 ```
 
-安装后重新打开 DSH。Web 用户将 `desktop` 换成 `web`；macOS 未配置 `dsh` 命令时，使用 `/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh`。
+也可以在 **插件 → 添加插件** 中安装。升级时先在插件详情中卸载旧版，再安装新版；已保存的会话批注会保留。Web 用户将 `desktop` 换成 `web`；macOS 未配置 `dsh` 命令时，使用 `/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh`。
 
 ## 使用
 
@@ -48,6 +48,6 @@ npm run test:host
 npm run screenshots
 ```
 
-`test:host` 和 `screenshots` 使用隔离配置和本地测试模型；后者更新上面的六张效果图。更多细节见 [验证记录](docs/verification.md) 和 [UI 对照](docs/ui-comparison.md)。
+`test:host` 和 `screenshots` 使用隔离配置和本地测试模型；后者更新上面的六张效果图。最新版兼容修复见 [兼容性说明](docs/COMPATIBILITY.md)。更多细节见 [验证记录](docs/verification.md) 和 [UI 对照](docs/ui-comparison.md)。
 
 [MIT License](LICENSE)

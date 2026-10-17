@@ -5,6 +5,7 @@ import { decodeText } from './core.js';
 import { capture, restoreRange } from './ranges.js';
 import { readingViewport, revealQuote } from './navigation.js';
 import css from './styles.css';
+import { decorateSlot } from './slot-decoration.js';
 
 export const inject = ['slots', 'sessions', 'conversation', 'uiConversation', 'inputTriggers'];
 const snapshot = store => useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -238,30 +239,22 @@ export function apply(ctx) {
   document.head.append(style);
   ctx.effect(() => () => { runtime.dispose(); style.remove(); });
   ctx.effect(() => ctx.inputTriggers.registerSource(runtime.source));
-  const decorated = new WeakSet(), registrations = new Map();
+  const registrations = new Map();
   const names = ['conversation.chat.node', 'conversation.input.attachments'];
   const decorate = () => {
     const entries = names.flatMap(name => ctx.slots.entries(name));
     for (const [entry, release] of registrations) if (!entries.includes(entry)) { registrations.delete(entry); release(); }
     for (const name of names) for (const entry of ctx.slots.entries(name)) {
       const Wrapper = name === 'conversation.input.attachments' ? Attachments : entry.options.key === 'assistant-step' ? Assistant : ['user', 'steering'].includes(entry.options.key) ? User : null;
-      if (!Wrapper || decorated.has(entry.component) || registrations.has(entry)) continue;
-      const original = entry.component;
-      function AnnotatedNode(props) {
+      if (!Wrapper || (entry.options.priority ?? 0) !== 0 || registrations.has(entry)) continue;
+      registrations.set(entry, () => {});
+      const release = decorateSlot(ctx, name, entry, (original, props, active) => {
         // DSH presents reasoning and response separately with the same node key.
         // Only the response owns quote navigation; the folded reasoning seat
         // otherwise reports a false missing-quote warning alongside the editor.
-        if (Wrapper === Assistant && props.groupPart === 'reasoning') return React.createElement(original, props);
+        if (!active || Wrapper === Assistant && props.groupPart === 'reasoning') return React.createElement(original, props);
         return <Wrapper {...props} dca={props.sessionId === undefined ? null : runtime.faceFor(props.sessionId)} inner={original}/>;
-      }
-      decorated.add(AnnotatedNode);
-      // The renderer caches injection by entry identity. Mutating an already
-      // mounted native entry leaves stale props and can abdicate its renderer.
-      // A separate priority entry keeps native registration/cache untouched.
-      registrations.set(entry, () => {});
-      const release = ctx.slots.register({ name, ...entry.options,
-        priority: (entry.options.priority ?? 0) - 1, inject: entry.inject, locale: entry.locale,
-        store: entry.store }, AnnotatedNode);
+      });
       registrations.set(entry, release);
     }
   };

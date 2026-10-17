@@ -1,6 +1,6 @@
 {
   "name": "@deepseekharness-plugin/dsh-codex-annotations",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "icon": "./icon.svg",
   "description": "Codex 风格的原文批注：选区菜单、编号锚点、可选评论和原生引用发送",
   "type": "module",
@@ -20,7 +20,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test tests/core.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "check": "npm run build && npm test",
     "screenshots": "npm run build && node scripts/capture-readme.mjs",
     "test:host": "node scripts/host-test.mjs"
