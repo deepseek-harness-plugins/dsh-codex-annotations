@@ -11,14 +11,15 @@ export const inject = ['slots', 'sessions', 'conversation', 'uiConversation', 'i
 const snapshot = store => useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'edit' ? <path d="m15 4 5 5M4 20l5-1L20 8a3.5 3.5 0 0 0-5-5L4 14l-1 7Z"/> : type === 'delete' ? <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></> : type === 'comment' ? <><path d="M20 15a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h8M7 12h5"/></> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
 
-function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss, viewport, reveal, avoid, hover }) {
+function Float({ anchor, gap = 6, inset = 0, align = 'start', children, className = '', onDismiss, viewport, reveal, avoid, hover }) {
   const root = useRef(null); const [position, setPosition] = useState({ left: 12, top: 12 });
   useLayoutEffect(() => {
     const update = () => {
       const rect = anchor(), el = root.current;
       if (!rect || !el) { onDismiss?.(); return; }
       const area = viewport?.() ?? { left: 12, right: window.innerWidth - 12, top: 12, bottom: window.innerHeight - 12 };
-      const left = Math.max(area.left, Math.min(rect.left + inset, area.right - el.offsetWidth));
+      const desiredLeft = rect.left + (align === 'center' ? (rect.width - el.getBoundingClientRect().width) / 2 : inset);
+      const left = Math.max(area.left, Math.min(desiredLeft, area.right - el.offsetWidth));
       let top = rect.top - el.offsetHeight - gap;
       const excluded = avoid?.();
       if (excluded && excluded.right > left && excluded.left < left + el.offsetWidth
@@ -33,7 +34,7 @@ function Float({ anchor, gap = 6, inset = 0, children, className = '', onDismiss
     const escape = e => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss?.(); } };
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { observer.disconnect(); window.removeEventListener('resize', update); document.removeEventListener('scroll', update, true); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-  }, [anchor, gap, inset, onDismiss, viewport, reveal, avoid]);
+  }, [anchor, gap, inset, align, onDismiss, viewport, reveal, avoid]);
   return createPortal(<div ref={root} data-dca-ui="" className={`dca-float ${className}`} style={position} {...hover}>{children}</div>, document.body);
 }
 
@@ -163,7 +164,7 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
           onClick={() => { setSelection(null); setOpen({ note }); }}>{note.number}</button>
       </React.Fragment>)}
     </div>
-    {selection && !open && <Float anchor={anchor} className="dca-menu" onDismiss={close}>
+    {selection && !open && <Float anchor={anchor} align="center" className="dca-menu" onDismiss={close}>
       <button onClick={() => { const note = face.add(selection.selector); if (note) { setOpen({ note, compact: true }); window.getSelection()?.removeAllRanges(); } }}>添加到对话</button>
     </Float>}
     {open && active && <Editor key={active.id} note={active} face={face} anchor={anchor} close={close} initiallyExpanded={!open.compact}

@@ -31,7 +31,7 @@ await writeFile(patch, JSON.stringify([
 const referenceQuote = '失的是助手回答正文，用量数字还在。这和刚才启用插件时出现的显示问题一致；我先检查你现在的窗';
 const modelNotes = text => [...text.matchAll(/\[用户批注\]\n[^\n]*\n([^\n]*)\n\[\/用户批注\]/g)].flatMap(match => JSON.parse(match[1]));
 const linkedQuote = '链接前文 dsh-annotation 和 dsh-sidenote，包含 Annotations ×N 与加粗文本。';
-const fixtureText = '这个插件会把选中的原文和你的评论随下一条消息一起发给模型。你可以连续添加多条批注，并随时返回原文查看。\n\n```js\nconst greeting = "你好🙂";\nconsole.log(greeting);\n```\n\n| 功能 | 状态 |\n| --- | --- |\n| 空评论 | 支持 |\n| 多条批注 | 支持 |\n\n'
+const fixtureText = '这个插件会把选中的原文和你的评论随下一条消息一起发给模型。你可以连续添加多条批注，并随时返回原文查看。\n\n“横条里的生意贷”，是同一个入口。\n\n```js\nconst greeting = "你好🙂";\nconsole.log(greeting);\n```\n\n| 功能 | 状态 |\n| --- | --- |\n| 空评论 | 支持 |\n| 多条批注 | 支持 |\n\n'
   + '链接前文 [dsh-annotation](https://github.com/omdsh-dev/dsh-annotation) 和 [dsh-sidenote](https://github.com/g-yixuan/dsh-sidenote)，包含 `Annotations ×N` 与**加粗文本**。\n\n'
   + Array.from({ length: 40 }, (_, i) => `长回答的第 ${i + 1} 段。跳转应定位具体选区，保留输入框，并避开顶部栏和批注浮层。`).join('\n\n')
   + '\n\n截图里消失的是助手回答正文，用量数字还在。这和刚才启用插件时出现的显示问题一致；我先检查你现在的窗口，再定位插件为何会把正文隐藏。';
@@ -208,9 +208,23 @@ try {
   await page.getByRole('button', { name:'批注 1，待发送', exact:true }).click();
   await page.getByRole('button', { name:'删除批注 1', exact:true }).click();
   await page.locator('[data-dca-marker]').waitFor({state:'hidden'});
+  await select('横条里的生意贷');
+  await measureControl('menu-idle', '.dca-menu');
+  const selectionPosition = await page.evaluate(() => {
+    const r = getSelection().getRangeAt(0).getBoundingClientRect();
+    return { center: r.left + r.width / 2, top: r.top };
+  });
+  assert.ok(Math.abs(uiMeasurements['menu-idle'].x + uiMeasurements['menu-idle'].width / 2 - selectionPosition.center) < 1, 'Selection menu must center above the selected text');
+  assert.ok(Math.abs(uiMeasurements['menu-idle'].y + uiMeasurements['menu-idle'].height + 6 - selectionPosition.top) < 1);
+  await page.getByRole('button', { name: '添加到对话', exact: true }).hover();
+  await measureControl('menu-hover', '.dca-menu');
+  assert.equal(uiMeasurements['menu-hover'].width, uiMeasurements['menu-idle'].width);
+  assert.equal(uiMeasurements['menu-hover'].height, uiMeasurements['menu-idle'].height);
+  assert.notEqual(uiMeasurements['menu-hover'].background, uiMeasurements['menu-idle'].background);
+  await page.mouse.move(0, 0);
   await select(referenceQuote); await screenshots('01-selection-menu');
   await measureControl('menu', '.dca-menu');
-  assert.equal(uiMeasurements.menu.height, 30);
+  assert.equal(uiMeasurements.menu.height, 29);
   assert.ok(uiMeasurements.menu.width <= 90);
   assert.deepEqual(await page.locator('.dca-menu').getByRole('button').allTextContents(), ['添加到对话']);
   await page.getByRole('button', { name: '添加到对话', exact: true }).click();

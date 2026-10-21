@@ -6,9 +6,10 @@
 .dca-marker { corner-shape:round;position:absolute;pointer-events:auto;border:0;background:var(--dsw-alias-state-business-primary,#3a83f7);color:#fff;width:27px;height:27px;border-radius:50% 50% 50% 3px;font-family:inherit;font-size:12px;font-weight:600;line-height:27px;box-shadow:none;cursor:pointer;padding:0;display:grid;place-items:center; }
 .dca-marker:hover,.dca-marker:focus-visible { filter:brightness(.95);outline:2px solid color-mix(in srgb,var(--dsw-alias-state-business-primary,#3a83f7) 45%,transparent);outline-offset:2px; }
 .dca-float { corner-shape:round;box-sizing:border-box;position:fixed;z-index:10000;color:var(--dsw-alias-label-primary,#232323);background:var(--dsw-alias-button-floating-fill,#fff);--dsw-elevation-stroke-color:var(--dsw-alias-border-l3,#e8e8e8);box-shadow:var(--dsw-elevation-panel,0 2px 8px #0000000d);border:0;font-family:inherit;font-size:13px;line-height:18px;max-width:calc(100vw - 24px); }
-.dca-menu { display:flex;padding:1px;border-radius:9px;white-space:nowrap; }
-.dca-menu button { padding:5px 6.75px;border:0;background:transparent;color:inherit;border-radius:8px;font:inherit;font-weight:600;cursor:pointer; }
-.dca-menu button:hover { background:var(--dsw-alias-interactive-bg-hover-solid,#f4f5f7); }
+.dca-menu { display:flex;height:29px;padding:0;border-radius:10px;white-space:nowrap;color:light-dark(#1b1c1d,#ededed);box-shadow:0 0 0 .5px color-mix(in srgb,currentColor 5%,transparent),0 2px 4px #0000000a,0 4px 8px #0000000a; }
+.dca-menu button { box-sizing:border-box;height:100%;padding:0 7.75px .5px;border:0;background:transparent;color:inherit;border-radius:inherit;font:inherit;font-weight:500;cursor:pointer; }
+.dca-menu:has(button:is(:hover,:focus-visible)) { background:light-dark(#f2f3f3,#2d2e30); }
+.dca-menu button:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary,#3a83f7);outline-offset:2px; }
 .dca-editor { width:min(296px,calc(100vw - 24px));padding:11px 16px;border:1px solid var(--dsw-alias-border-l3,#e6e6e6);border-radius:24px;box-shadow:0 1px 2px #0000000d; }
 .dca-editor-compact { height:46px;display:flex;align-items:center; }
 .dca-editor-expanded { padding:12px;display:flex;flex-direction:column;gap:10px;min-height:86px;border-radius:24px; }
