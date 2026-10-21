@@ -49,15 +49,6 @@ function useHoverCard() {
   return { expanded, open: hover.onPointerEnter, close, hover };
 }
 
-function Details({ note, anchor, close, locate }) {
-  return <Float anchor={anchor} className="dca-details" onDismiss={close}>
-    <header><span>{note.number ? `批注 ${note.number}` : '选区详情'}</span><button className="dca-icon" aria-label="关闭详情" onClick={close}>{icon('close')}</button></header>
-    <pre>{note.quote}</pre><p className="dca-meta">助手原文 · {note.number ? (note.status === 'sent' ? '已发送' : '待发送') : '尚未添加'} · {note.quote.length} 字符</p>
-    {note.comment && <footer>{note.comment}</footer>}
-    {locate && <button className="dca-pill" onClick={locate}>回到原文</button>}
-  </Float>;
-}
-
 function Editor({ note, face, anchor, close, initiallyExpanded = true, viewport, reveal, avoid }) {
   const input = useRef(null);
   const [expanded, setExpanded] = useState(initiallyExpanded), [draft, setDraft] = useState(note.comment);
@@ -146,7 +137,7 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
       const note = event.detail.note, range = restoreRange(source.current, note);
       if (!range) { face.report('原文已变化，无法准确定位；批注原文仍保留。'); return; }
       const editing = event.type === 'dca:edit' && note.status !== 'sent';
-      setSelection(null); setOpen(editing ? { kind: 'edit', note, reveal: true } : null);
+      setSelection(null); setOpen(editing ? { note, reveal: true } : null);
       const current = window.getSelection();
       current?.removeAllRanges();
       revealQuote(root.current, range, { spaceAbove: editing ? 100 : 36,
@@ -160,7 +151,7 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
     window.addEventListener('dca:locate', locate); window.addEventListener('dca:edit', locate);
     return () => { clearTimeout(timer); window.removeEventListener('dca:locate', locate); window.removeEventListener('dca:edit', locate); };
   }, [face, nodeKey]);
-  const active = open && (open.note.id ? view.annotations.find(a => a.id === open.note.id) : open.note);
+  const active = open && view.annotations.find(a => a.id === open.note.id);
   const anchor = () => active ? (restoreRange(source.current, active)?.getBoundingClientRect() ?? root.current.getBoundingClientRect()) : selection?.range?.getBoundingClientRect();
   const close = () => { setOpen(null); setSelection(null); };
   return <div ref={root} className="dca-source" data-dca-node-key={nodeKey} data-dca-session={face.sessionId}>
@@ -169,17 +160,15 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
       {layout.map(({ note, paint, path, left, top }) => <React.Fragment key={note.id}>
         <svg data-dca-highlight={note.id} className="dca-highlight" style={paint} viewBox={`0 0 ${paint.width} ${paint.height}`} aria-hidden="true"><path d={path} fillRule="nonzero"/></svg>
         <button className="dca-marker" data-dca-marker={note.id} style={{ left, top }} aria-label={`批注 ${note.number}，待发送`}
-          onClick={() => { setSelection(null); setOpen({ kind: 'edit', note }); }}>{note.number}</button>
+          onClick={() => { setSelection(null); setOpen({ note }); }}>{note.number}</button>
       </React.Fragment>)}
     </div>
     {selection && !open && <Float anchor={anchor} className="dca-menu" onDismiss={close}>
-      <button onClick={() => { const note = face.add(selection.selector); if (note) { setOpen({ kind: 'edit', note, compact: true }); window.getSelection()?.removeAllRanges(); } }}>添加到对话</button>
-      <button onClick={() => setOpen({ kind: 'details', note: selection.selector })}>更多详情</button>
+      <button onClick={() => { const note = face.add(selection.selector); if (note) { setOpen({ note, compact: true }); window.getSelection()?.removeAllRanges(); } }}>添加到对话</button>
     </Float>}
-    {open?.kind === 'edit' && active && <Editor key={active.id} note={active} face={face} anchor={anchor} close={close} initiallyExpanded={!open.compact}
+    {open && active && <Editor key={active.id} note={active} face={face} anchor={anchor} close={close} initiallyExpanded={!open.compact}
       avoid={() => root.current.querySelector(`[data-dca-marker="${CSS.escape(active.id)}"]`)?.getBoundingClientRect()}
       viewport={() => readingViewport(root.current)} reveal={open.reveal ? height => revealQuote(root.current, restoreRange(source.current, active), { spaceAbove: height, center: false }) : undefined}/>}
-    {open?.kind === 'details' && active && <Details note={active} anchor={anchor} close={close}/>}
   </div>;
 }
 

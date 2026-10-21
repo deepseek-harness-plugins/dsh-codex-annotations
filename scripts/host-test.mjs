@@ -211,11 +211,9 @@ try {
   await select(referenceQuote); await screenshots('01-selection-menu');
   await measureControl('menu', '.dca-menu');
   assert.equal(uiMeasurements.menu.height, 30);
-  assert.ok(uiMeasurements.menu.width <= 155);
-  await page.getByRole('button', { name: '更多详情', exact: true }).click();
-  assert.equal(await page.locator('.dca-details pre').innerText(), referenceQuote);
-  await page.getByRole('button', { name: '关闭详情' }).click();
-  await select(referenceQuote); await page.getByRole('button', { name: '添加到对话', exact: true }).click();
+  assert.ok(uiMeasurements.menu.width <= 90);
+  assert.deepEqual(await page.locator('.dca-menu').getByRole('button').allTextContents(), ['添加到对话']);
+  await page.getByRole('button', { name: '添加到对话', exact: true }).click();
   await measureControl('editor-compact', '.dca-editor-compact');
   assert.equal(uiMeasurements['editor-compact'].width, 296); assert.equal(uiMeasurements['editor-compact'].height, 46);
   await screenshots('10-compact-editor');
@@ -325,6 +323,7 @@ try {
   assert.equal(await page.locator('[data-dca-marker]').count(), 2);
   await page.reload({ waitUntil:'domcontentloaded' }); await input.waitFor();
   await input.locator('[data-composer-chip="dsh-codex-annotations"]').waitFor({ state:'attached' });
+  await page.locator('[data-dca-marker]').nth(1).waitFor();
   assert.deepEqual(await page.locator('[data-dca-marker]').allTextContents(), ['1','2']);
   assert.equal(await page.getByRole('button', { name:'附加批注', exact:true }).count(), 0);
   await input.click(); await input.press('End');
@@ -539,7 +538,7 @@ try {
   await writeFile(join(artifacts, 'ui-measurements.json'), JSON.stringify(uiMeasurements, null, 2));
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: spawnSync(cli, ['--version'], {encoding:'utf8'}).stdout.trim(), isolatedHome: home, errors, acceptedUser: last,
     modelProjection: { persistedUser: durable, projectedNotes, teardownRestored: true, reactivationProjectedHistory: true, compactionProjected: true },
-    checks: ['native-child-slot-reasoning-body', 'sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'selection-details', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
+    checks: ['native-child-slot-reasoning-body', 'sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'single-add-to-conversation-action', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {
   if (page) { await screenshots('failure'); console.error(await page.locator('body').innerText()); }
