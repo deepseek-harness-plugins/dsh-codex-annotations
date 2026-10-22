@@ -359,7 +359,20 @@ try {
   await input.click(); await input.press('End');
   await page.keyboard.insertText('请按批注修改。'); await input.pressSequentially(' Keep English.');
   assert.match(await input.innerText(), /请按批注修改。 Keep English\./);
+  await page.evaluate(() => {
+    window.__dcaEchoFrames = [];
+    const sample = () => {
+      window.__dcaEchoFrames.push([...document.querySelectorAll('[data-submission-echo]')].map(el => el.innerText));
+      window.__dcaEchoFrame = requestAnimationFrame(sample);
+    };
+    window.__dcaEchoFrame = requestAnimationFrame(sample);
+  });
   await input.press('Enter'); await page.getByText('本地测试已收到批注与用户要求。', { exact: true }).waitFor();
+  const echoFrames = await page.evaluate(() => { cancelAnimationFrame(window.__dcaEchoFrame); return window.__dcaEchoFrames; });
+  await writeFile(join(artifacts, 'submission-echo-frames.json'), JSON.stringify(echoFrames, null, 2));
+  assert.ok(echoFrames.some(frame => frame.length), '发送检查必须实际捕获本地即时回显');
+  assert.ok(echoFrames.flat().every(text => !text.includes('[DSH_ANNOTATIONS_V1:')), '任何可绘制的本地发送回显都不能显示批注协议');
+  assert.ok(echoFrames.flat().some(text => text.includes('2 条注释') && text.includes('请按批注修改。 Keep English.')), '即时回显应保留批注数量与普通正文');
   await screenshots('05-sent-annotations');
   const messages = JSON.parse(await readFile(capturePath, 'utf8')), last = messages.filter(m => m.role === 'user' && m.content?.some(b => b.type === 'text' && modelNotes(b.text).length)).at(-1);
   const text = last.content.filter(b => b.type === 'text').map(b => b.text).join(''), projectedNotes = modelNotes(text);
@@ -571,7 +584,8 @@ try {
   await writeFile(join(artifacts, 'ui-measurements.json'), JSON.stringify(uiMeasurements, null, 2));
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: spawnSync(cli, ['--version'], {encoding:'utf8'}).stdout.trim(), isolatedHome: home, errors, acceptedUser: last,
     modelProjection: { persistedUser: durable, projectedNotes, teardownRestored: true, reactivationProjectedHistory: true, compactionProjected: true },
-    checks: ['save-restores-composer-focus-and-caret', 'save-then-Enter-sends-without-refocusing', 'native-child-slot-reasoning-body', 'sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'single-add-to-conversation-action', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
+    submissionEcho: { sampledFrames: echoFrames.length, visibleEchoes: echoFrames.filter(frame => frame.length).length, rawProtocolFrames: echoFrames.filter(frame => frame.some(text => text.includes('[DSH_ANNOTATIONS_V1:'))).length },
+    checks: ['optimistic-echo-never-shows-annotation-protocol', 'save-restores-composer-focus-and-caret', 'save-then-Enter-sends-without-refocusing', 'native-child-slot-reasoning-body', 'sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'single-add-to-conversation-action', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {
   if (page) { await screenshots('failure'); console.error(await page.locator('body').innerText()); }

@@ -41,6 +41,14 @@ function replacePayloads(text, render) {
 
 export function decodeText(text) { return replacePayloads(text, () => ''); }
 
+/** Native pre-admission echoes are plain text, outside the keyed message renderer. */
+export function submissionText(text) {
+  const decoded = decodeText(text);
+  if (!decoded.payloads.length) return text;
+  const count = decoded.payloads.reduce((total, payload) => total + payload.annotations.length, 0);
+  return `${count} 条注释${decoded.text.trim() ? '\n' + decoded.text : ''}`;
+}
+
 /** Keep full quotes/comments, without UI identity and anchoring fields. */
 export function modelText(text) {
   return replacePayloads(text, payload => {

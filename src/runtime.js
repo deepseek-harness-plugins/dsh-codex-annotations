@@ -1,4 +1,4 @@
-import { AnnotationStore, SOURCE, STORAGE_PREFIX, encodePayload, decodeText } from './core.js';
+import { AnnotationStore, SOURCE, STORAGE_PREFIX, encodePayload, decodeText, submissionText } from './core.js';
 
 /** Bind public DSH services only. No Lexical internals or send interception. */
 export function createRuntime(ctx) {
@@ -16,6 +16,21 @@ export function createRuntime(ctx) {
       store = new AnnotationStore({ getItem: () => null, setItem: () => { throw storageError; } }, String(sessionId));
     }
     const input = ctx.conversation.input.for(binding.ctx);
+    // Change only the native optimistic echo. prompt() still receives the
+    // original serialized message, and retirement retains its native request id.
+    const session = binding.session, begin = session.beginSubmission;
+    const descriptor = Object.getOwnPropertyDescriptor(session, 'beginSubmission');
+    function presentSubmission(options) {
+      const text = submissionText(options.text);
+      return begin.call(this, text === options.text ? options : { ...options, text });
+    }
+    session.beginSubmission = presentSubmission;
+    const restoreSubmission = () => {
+      if (session.beginSubmission !== presentSubmission) return;
+      if (descriptor) Object.defineProperty(session, 'beginSubmission', descriptor);
+      else delete session.beginSubmission;
+    };
+    releases.push(restoreSubmission);
     const listeners = new Set();
     let notice = '';
     const report = error => { if (error instanceof Error) console.error('[dsh-codex-annotations]', error.stack); notice = error instanceof Error ? error.message : String(error); for (const fn of listeners) fn(); };
@@ -98,7 +113,7 @@ export function createRuntime(ctx) {
     const offInbox = inbox.subscribe(() => queueMicrotask(() => { if (!disposed) reconcile(); }));
     releases.push(offInput, offChat, offInbox);
     releases.push(() => { disposed = true; });
-    binding.ctx.effect(() => () => { disposed = true; offInput(); offChat(); offInbox(); faces.delete(sessionId); });
+    binding.ctx.effect(() => () => { disposed = true; offInput(); offChat(); offInbox(); restoreSubmission(); faces.delete(sessionId); });
     if (storageError) report(storageError);
     queueMicrotask(() => {
       reconcile();

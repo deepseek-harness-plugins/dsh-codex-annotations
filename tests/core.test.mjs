@@ -1,9 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AnnotationStore, encodePayload, decodeText, locateQuote, modelText, modelMessage, modelMessages } from '../src/core.js';
+import { AnnotationStore, encodePayload, decodeText, locateQuote, modelText, modelMessage, modelMessages, submissionText } from '../src/core.js';
 import { apply } from '../src/index.js';
 const storage = () => { const data = new Map(); return { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) }; };
 const selector = { nodeKey: 'assistant:1', start: 0, end: 4, quote: '原文🙂', prefix: '', suffix: '' };
+
+test('本地回显将完整批注协议投影为数量，保留普通正文且不改写发送载荷', () => {
+  const store = new AnnotationStore(storage(), 'echo');
+  store.add(selector); store.add({ ...selector, quote: '另一条原文' });
+  const payload = encodePayload(store.prepare(store.getSnapshot().ref));
+  assert.equal(submissionText(payload), '2 条注释');
+  const message = '  请按批注处理🙂\n' + payload + '\n保留这行。 ';
+  assert.equal(submissionText(message), '2 条注释\n  请按批注处理🙂\n\n保留这行。 ');
+  assert.equal(submissionText(payload + payload), '4 条注释');
+  assert.equal(decodeText(payload).payloads[0].annotations.length, 2);
+  for (const text of ['普通消息', '[DSH_ANNOTATIONS_V1:10:fake]\n{}', payload.slice(0, -1)])
+    assert.equal(submissionText(text), text);
+});
 
 test('空评论、Unicode、多行和协议定界符原样往返', () => {
   const s = new AnnotationStore(storage(), 'session-a');
