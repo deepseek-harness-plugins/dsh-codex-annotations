@@ -6,12 +6,13 @@ import { capture, restoreRange } from './ranges.js';
 import { readingViewport, revealQuote } from './navigation.js';
 import css from './styles.css';
 import { decorateSlot } from './slot-decoration.js';
+import { CITATION_SELECTOR, citationNumber } from './citations.js';
 
 export const inject = ['slots', 'sessions', 'conversation', 'uiConversation', 'inputTriggers'];
 const snapshot = store => useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 const icon = (type) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'check' ? <path d="m5 12 4 4L19 6"/> : type === 'edit' ? <path d="m15 4 5 5M4 20l5-1L20 8a3.5 3.5 0 0 0-5-5L4 14l-1 7Z"/> : type === 'delete' ? <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></> : type === 'comment' ? <><path d="M20 15a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h8M7 12h5"/></> : <path d="m6 6 12 12M18 6 6 18"/>}</svg>;
 
-function Float({ anchor, gap = 6, inset = 0, align = 'start', children, className = '', onDismiss, viewport, reveal, avoid, hover }) {
+function Float({ anchor, gap = 6, inset = 0, align = 'start', side = 'top', children, className = '', onDismiss, viewport, reveal, avoid, hover }) {
   const root = useRef(null); const [position, setPosition] = useState({ left: 12, top: 12 });
   useLayoutEffect(() => {
     const update = () => {
@@ -20,7 +21,8 @@ function Float({ anchor, gap = 6, inset = 0, align = 'start', children, classNam
       const area = viewport?.() ?? { left: 12, right: window.innerWidth - 12, top: 12, bottom: window.innerHeight - 12 };
       const desiredLeft = rect.left + (align === 'center' ? (rect.width - el.getBoundingClientRect().width) / 2 : inset);
       const left = Math.max(area.left, Math.min(desiredLeft, area.right - el.offsetWidth));
-      let top = rect.top - el.offsetHeight - gap;
+      let top = side === 'bottom' ? rect.bottom + gap : rect.top - el.offsetHeight - gap;
+      if (side === 'bottom' && top + el.offsetHeight > area.bottom) top = rect.top - el.offsetHeight - gap;
       const excluded = avoid?.();
       if (excluded && excluded.right > left && excluded.left < left + el.offsetWidth
         && excluded.bottom > top && excluded.top < top + el.offsetHeight) top = excluded.top - el.offsetHeight - gap;
@@ -34,7 +36,7 @@ function Float({ anchor, gap = 6, inset = 0, align = 'start', children, classNam
     const escape = e => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss?.(); } };
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { observer.disconnect(); window.removeEventListener('resize', update); document.removeEventListener('scroll', update, true); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-  }, [anchor, gap, inset, align, onDismiss, viewport, reveal, avoid]);
+  }, [anchor, gap, inset, align, side, onDismiss, viewport, reveal, avoid]);
   return createPortal(<div ref={root} data-dca-ui="" className={`dca-float ${className}`} style={position} {...hover}>{children}</div>, document.body);
 }
 
@@ -90,7 +92,56 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
   const root = useRef(null), source = useRef(null);
   const view = snapshot(face.store);
   const [selection, setSelection] = useState(null), [open, setOpen] = useState(null), [layout, setLayout] = useState([]);
+  const citationPopup = useHoverCard(), citationTimer = useRef(null);
+  const [citationTarget, setCitationTarget] = useState(null);
+  useEffect(() => () => clearTimeout(citationTimer.current), []);
   const nodeKey = String(props.node.key);
+  const previewCitation = event => {
+    const link = event.target.closest(CITATION_SELECTOR);
+    if (!link || link.contains(event.relatedTarget)) return;
+    clearTimeout(citationTimer.current);
+    const show = () => {
+      const number = citationNumber(link.getAttribute('href'));
+      const note = number === null ? null : face.reference(number, nodeKey);
+      if (!note) return;
+      setCitationTarget({ note, element: link }); citationPopup.open();
+    };
+    if (event.type === 'focus') show();
+    else citationTimer.current = setTimeout(show, 500);
+  };
+  const leaveCitation = event => {
+    const link = event.target.closest(CITATION_SELECTOR);
+    if (!link || link.contains(event.relatedTarget)) return;
+    clearTimeout(citationTimer.current); citationPopup.hover.onPointerLeave();
+  };
+  const activateCitation = event => {
+    const link = event.target.closest(CITATION_SELECTOR);
+    if (!link || !source.current?.contains(link)) return;
+    event.preventDefault(); event.stopPropagation();
+    clearTimeout(citationTimer.current); citationPopup.close();
+    if (event.type === 'auxclick') return;
+    const number = citationNumber(link.getAttribute('href'));
+    if (number === null) { face.report('批注引用的编号无效。'); return; }
+    face.cite(number, nodeKey);
+  };
+  useLayoutEffect(() => {
+    const label = () => {
+      for (const link of source.current.querySelectorAll(CITATION_SELECTOR)) {
+        const number = citationNumber(link.getAttribute('href'));
+        link.dataset.dcaUi = '';
+        link.removeAttribute('title');
+        const note = number === null ? null : face.reference(number, nodeKey);
+        const lines = note?.quote.split('\n').length;
+        link.setAttribute('aria-label', number === null ? '无效的批注引用' : !note ? `注释 ${number}`
+          : lines > 1 ? `注释 ${number}：所选文本，${lines} 行` : `注释 ${number}：${note.quote}`);
+        link.removeAttribute('target');
+      }
+    };
+    label();
+    const observer = new MutationObserver(label);
+    observer.observe(source.current, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [props.node]);
   const notes = view.annotations.filter(a => a.nodeKey === nodeKey && a.status === 'pending');
   const selected = () => {
     if (!source.current) return;
@@ -160,7 +211,17 @@ function Assistant({ inner: Inner, dca: face, ...props }) {
   const anchor = () => active ? (restoreRange(source.current, active)?.getBoundingClientRect() ?? root.current.getBoundingClientRect()) : selection?.range?.getBoundingClientRect();
   const close = () => { setOpen(null); setSelection(null); };
   return <div ref={root} className="dca-source" data-dca-node-key={nodeKey} data-dca-session={face.sessionId}>
-    <div ref={source} data-dca-content="" onPointerUp={() => setTimeout(selected, 0)} onKeyUp={selected}><Inner {...props}/></div>
+    <div ref={source} data-dca-content="" onClickCapture={activateCitation} onAuxClickCapture={activateCitation}
+      onPointerOverCapture={previewCitation} onPointerOutCapture={leaveCitation} onFocusCapture={previewCitation} onBlurCapture={leaveCitation}
+      onPointerUp={() => setTimeout(selected, 0)} onKeyUp={selected}><Inner {...props}/></div>
+    {citationPopup.expanded && citationTarget && <Float side="bottom" gap={4} className="dca-citation-preview"
+      anchor={() => citationTarget.element.isConnected ? citationTarget.element.getBoundingClientRect() : null}
+      onDismiss={citationPopup.close} hover={citationPopup.hover}>
+      <div><div className="dca-citation-label">所选文本：</div>
+        {citationTarget.note.quote.includes('\n') ? <pre className="dca-citation-code" tabIndex={0} role="region" aria-label="所选注释文本">{citationTarget.note.quote}</pre>
+          : <div className="dca-citation-text">{citationTarget.note.quote}</div>}</div>
+      {citationTarget.note.comment.trim() && <div><div className="dca-citation-label">用户评论：</div><div className="dca-citation-text">{citationTarget.note.comment}</div></div>}
+    </Float>}
     <div className="dca-layer" data-dca-ui="">
       {layout.map(({ note, paint, path, left, top }) => <React.Fragment key={note.id}>
         <svg data-dca-highlight={note.id} className="dca-highlight" style={paint} viewBox={`0 0 ${paint.width} ${paint.height}`} aria-hidden="true"><path d={path} fillRule="nonzero"/></svg>

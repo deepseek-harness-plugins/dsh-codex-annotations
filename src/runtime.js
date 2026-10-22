@@ -1,4 +1,5 @@
 import { AnnotationStore, SOURCE, STORAGE_PREFIX, encodePayload, decodeText, submissionText } from './core.js';
+import { resolveCitation } from './citations.js';
 
 /** Bind public DSH services only. No Lexical internals or send interception. */
 export function createRuntime(ctx) {
@@ -64,7 +65,17 @@ export function createRuntime(ctx) {
     const face = { sessionId: String(sessionId), store, input, editable, run, report,
       notice: { subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); }, getSnapshot: () => notice },
       dismiss: () => report(''),
-      add: selector => run(() => { const note = store.add(selector); ensure(true); return note; }),
+      add: selector => run(() => {
+        // History survives a cleared browser cache; its sent numbers remain reserved.
+        const numbers = [];
+        for (const node of chat.getSnapshot()?.nodes.values() ?? []) {
+          if (node.kind !== 'user' && node.kind !== 'steering') continue;
+          for (const block of node.data.content ?? []) if (block.type === 'text')
+            for (const payload of decodeText(block.text).payloads)
+              numbers.push(...payload.annotations.map(note => note.number));
+        }
+        const note = store.add(selector, numbers); ensure(true); return note;
+      }),
       edit: (id, fields) => run(() => {
         if (!editable()) throw new Error('请等待发送完成后再编辑批注。');
         store.edit(id, fields);
@@ -78,8 +89,17 @@ export function createRuntime(ctx) {
         detach();
       }),
       locate: note => {
+        const mounted = [...document.querySelectorAll('[data-dca-node-key]')].some(el =>
+          el.dataset.dcaSession === String(sessionId) && el.dataset.dcaNodeKey === note.nodeKey);
+        if (!mounted) { report('批注原文当前未显示，请展开对应的历史回复后重试。'); return; }
         window.dispatchEvent(new CustomEvent('dca:locate', { detail: { sessionId: String(sessionId), note } }));
-      }
+      },
+      reference: (number, replyKey) => resolveCitation(chat.getSnapshot()?.nodes.values() ?? [], replyKey, number),
+      cite: (number, replyKey) => {
+        const note = face.reference(number, replyKey);
+        if (!note) { report(`找不到此回复对应的批注 ${number}。`); return; }
+        face.locate(note);
+      },
     };
     faces.set(sessionId, face);
     // A persisted native draft stores clipboard text. Restore only our own exact token.

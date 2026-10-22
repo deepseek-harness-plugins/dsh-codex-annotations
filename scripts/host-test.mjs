@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { decodeText } from '../src/core.js';
+import { CITATION_GUIDANCE } from '../src/citations.js';
 
 const project = resolve(new URL('..', import.meta.url).pathname);
 const cli = process.env.DCA_CLI ?? '/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh';
@@ -376,6 +377,32 @@ try {
   await screenshots('05-sent-annotations');
   const messages = JSON.parse(await readFile(capturePath, 'utf8')), last = messages.filter(m => m.role === 'user' && m.content?.some(b => b.type === 'text' && modelNotes(b.text).length)).at(-1);
   const text = last.content.filter(b => b.type === 'text').map(b => b.text).join(''), projectedNotes = modelNotes(text);
+  const systemText = messages.filter(message => message.role === 'system').flatMap(message => message.content.map(block => block.text ?? '')).join('\n');
+  assert.equal(systemText.split(CITATION_GUIDANCE).length - 1, 1, '真实请求应包含一次完整的批注引用提示');
+  await page.getByRole('link', { name: /^注释 1：/ }).waitFor();
+  await page.getByRole('link', { name: /^注释 2：/ }).waitFor();
+  const citationLink = page.getByRole('link', { name: /^注释 1：/ }).first();
+  const citationStyle = await citationLink.evaluate(el => {
+    const css = getComputedStyle(el), prose = getComputedStyle(el.parentElement);
+    return { font: css.fontSize, proseFont: prose.fontSize, color: css.color, background: css.backgroundColor, padding: css.padding, radius: css.borderRadius };
+  });
+  assert.equal(citationStyle.font, citationStyle.proseFont, '注释链接使用正文同字号');
+  assert.equal(citationStyle.background, 'rgba(0, 0, 0, 0)', '注释引用不能显示灰底胶囊');
+  assert.equal(citationStyle.padding, '0px'); assert.equal(citationStyle.radius, '0px');
+  assert.equal(citationStyle.color, 'rgb(58, 131, 247)');
+  await screenshots('19-reply-annotation-citations');
+  await citationLink.hover(); await page.locator('.dca-citation-preview').waitFor();
+  const previewBox = await page.locator('.dca-citation-preview').boundingBox();
+  assert.ok(previewBox.width <= 448, '引用预览最大宽度为 28rem');
+  assert.equal(await page.locator('.dca-citation-preview .dca-citation-text').first().innerText(), referenceQuote);
+  assert.equal(await page.locator('.dca-citation-preview .dca-citation-text').nth(1).innerText(), '测试1');
+  const citationHover = await citationLink.evaluate(el => { const css = getComputedStyle(el); return { decoration: css.textDecorationLine, style: css.textDecorationStyle, thickness: css.textDecorationThickness }; });
+  assert.deepEqual(citationHover, { decoration: 'underline', style: 'dashed', thickness: '0.5px' });
+  await screenshots('20-reply-annotation-hover');
+  await page.locator('.dca-citation-preview').hover();
+  assert.equal(await page.locator('.dca-citation-preview').count(), 1, '预览应允许鼠标进入并选择文字');
+  await page.keyboard.press('Escape'); await page.locator('.dca-citation-preview').waitFor({ state: 'hidden' });
+  await page.mouse.move(10, 10);
   assert.match(text, /请按批注修改。 Keep English\./);
   assert.deepEqual(projectedNotes, [{ number: 1, quote: referenceQuote, comment: '测试1' }, { number: 2, quote: '连续添加多条批注' }]);
   for (const field of ['DSH_ANNOTATIONS_V1', 'nodeKey', 'prefix', 'suffix', 'revision', 'sessionId']) assert.ok(!text.includes(field), field + ' must stay out of model annotations');
@@ -393,6 +420,11 @@ try {
   assert.equal(await page.locator('.dca-highlight').count(), 0, 'Sent notes must not paint permanent source highlights');
   assert.equal(await page.locator('.dca-sent-pills .dca-batch-chip').count(), 1);
   assert.equal(await page.getByText('[DSH_ANNOTATIONS_V1:', { exact: false }).count(), 0);
+  // The durable conversation, rather than this browser's annotation cache,
+  // must resolve historical links and reserve their numbers for later notes.
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) if (key.startsWith('dsh-codex-annotations:v1:')) localStorage.removeItem(key);
+  });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.dca-sent-pills .dca-batch-chip').waitFor();
   await assertSentLayout(0, 'sent-message-layout');
@@ -414,6 +446,24 @@ try {
     assert.equal(await page.locator('[data-dca-marker],.dca-highlight,.dca-float').count(), 0, 'Sent navigation must only select the source text');
   };
   await assertSentSelection();
+  const replyCitation = page.getByRole('link', { name: /^注释 1：/ }).first();
+  const beforeCitationUrl = page.url(), beforeCitationPages = browser.contexts()[0].pages().length;
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  await replyCitation.click();
+  await assertSentSelection();
+  assert.equal(await page.locator('.dca-notice').count(), 0, '已知批注引用不应出现无法定位提示');
+  await screenshots('22-reply-citation-source-highlight');
+  assert.equal(page.url(), beforeCitationUrl, '点击批注引用不能进行网页导航');
+  assert.equal(browser.contexts()[0].pages().length, beforeCitationPages, '批注引用不能打开外部窗口');
+  const secondCitation = page.getByRole('link', { name: /^注释 2：/ }).first();
+  await secondCitation.focus(); await secondCitation.press('Enter');
+  await page.waitForFunction(() => window.getSelection()?.toString() === '连续添加多条批注');
+  await input.click(); await page.keyboard.insertText('回跳保留的草稿');
+  await replyCitation.click(); await assertSentSelection();
+  assert.equal(await input.innerText(), '回跳保留的草稿');
+  await input.click(); await input.press('ControlOrMeta+a'); await input.press('Backspace');
+  await replyCitation.click({ button: 'middle' });
+  assert.equal(browser.contexts()[0].pages().length, beforeCitationPages, '中键不应访问内部引用地址');
   await screenshots('17-sent-source-selection');
   await input.click();
   assert.notEqual(await page.evaluate(() => window.getSelection()?.toString()), referenceQuote, 'Clicking elsewhere must clear the sent source selection');
@@ -494,6 +544,11 @@ try {
   assert.ok(codeMessage); const codeNotes = codeMessage.content.flatMap(b => b.type === 'text' ? modelNotes(b.text) : []);
   assert.equal(codeNotes[0].quote, 'const greeting = "你好🙂";\nconsole.log(greeting);');
   assert.equal(codeNotes[0].comment, '代码注释\n保留中文与🙂');
+  const codeCitation = page.getByRole('link', { name: /^注释 3：所选文本，2 行$/ }).last();
+  await codeCitation.hover(); await page.locator('.dca-citation-code').waitFor();
+  assert.equal(await page.locator('.dca-citation-code').innerText(), codeNotes[0].quote);
+  await screenshots('21-reply-code-annotation-hover');
+  await page.keyboard.press('Escape'); await page.mouse.move(10, 10);
   assert.ok(codeMessage.content.some(b => b.type === 'image'));
   assert.ok(codeMessage.content.some(b => b.type === 'file' || b.type === 'text' && b.text.includes('review.txt')));
   // Session scope must not carry pending references into another conversation.
@@ -503,6 +558,7 @@ try {
   const other = rows.filter({ hasText: '另一会话' });
   if (await other.count()) await other.click(); else await rows.filter({ hasText: '未命名' }).click();
   await page.getByText('这是另一个会话，批注应相互独立。', { exact: true }).waitFor();
+  assert.equal(await page.locator('a[href^="https://dsh-annotations.invalid/"]').count(), 0, '引用不得泄漏到其他会话');
   assert.equal(await page.locator('[data-dca-marker]').count(), 0);
   assert.equal(await page.locator('[data-dca-dock]').count(), 0);
   await rows.filter({ hasText: '批注交互预览' }).click();
@@ -560,6 +616,7 @@ try {
   await input.click(); await page.keyboard.insertText('停用后验证原始上下文'); await input.press('Enter');
   await replies.nth(beforeDisableSend).waitFor();
   const disabledMessages = JSON.parse(await readFile(capturePath, 'utf8'));
+  assert.ok(!disabledMessages.filter(message => message.role === 'system').some(message => message.content.some(block => block.text?.includes(CITATION_GUIDANCE))), '停用后撤销批注引用提示词');
   assert.ok(disabledMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && decodeText(b.text).payloads.length)), 'Disabling must restore the original public history reader');
   await page.getByRole('button', { name: '插件', exact: true }).click();
   await page.locator('[data-plugin-package="@deepseekharness-plugin/dsh-codex-annotations"]').getByRole('switch').click();
@@ -569,6 +626,8 @@ try {
   await input.click(); await page.keyboard.insertText('再次启用验证历史批注'); await input.press('Enter');
   await replies.nth(beforeReenableSend).waitFor();
   const reenabledMessages = JSON.parse(await readFile(capturePath, 'utf8'));
+  const reenabledSystemText = reenabledMessages.filter(message => message.role === 'system').flatMap(message => message.content.map(block => block.text ?? '')).join('\n');
+  assert.equal(reenabledSystemText.split(CITATION_GUIDANCE).length - 1, 1, '再次启用后提示词不能重复');
   assert.ok(reenabledMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && modelNotes(b.text).length)));
   assert.ok(!reenabledMessages.some(m => m.role === 'user' && m.content.some(b => b.type === 'text' && decodeText(b.text).payloads.length)), 'Reactivation must also slim retained historical annotations');
   await screenshots('18-model-projection-history');
@@ -585,7 +644,7 @@ try {
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: spawnSync(cli, ['--version'], {encoding:'utf8'}).stdout.trim(), isolatedHome: home, errors, acceptedUser: last,
     modelProjection: { persistedUser: durable, projectedNotes, teardownRestored: true, reactivationProjectedHistory: true, compactionProjected: true },
     submissionEcho: { sampledFrames: echoFrames.length, visibleEchoes: echoFrames.filter(frame => frame.length).length, rawProtocolFrames: echoFrames.filter(frame => frame.some(text => text.includes('[DSH_ANNOTATIONS_V1:'))).length },
-    checks: ['optimistic-echo-never-shows-annotation-protocol', 'save-restores-composer-focus-and-caret', 'save-then-Enter-sends-without-refocusing', 'native-child-slot-reasoning-body', 'sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'single-add-to-conversation-action', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
+    checks: ['reply-citations-use-native-markdown-and-session-history', 'codex-inline-text-and-dashed-hover', 'citation-hover-shows-full-quote-and-comment', 'multiline-citation-code-preview', 'citation-click-and-keyboard-jump-preserve-draft', 'citation-history-survives-cleared-local-cache', 'historical-numbers-remain-reserved', 'citation-prompt-registers-once-and-disposes', 'optimistic-echo-never-shows-annotation-protocol', 'save-restores-composer-focus-and-caret', 'save-then-Enter-sends-without-refocusing', 'native-child-slot-reasoning-body', 'sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'single-add-to-conversation-action', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {
   if (page) { await screenshots('failure'); console.error(await page.locator('body').innerText()); }

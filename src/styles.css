@@ -1,4 +1,12 @@
 .dca-source { position:relative; }
+.dca-source a[href^="https://dsh-annotations.invalid/"] { display:inline;vertical-align:baseline;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:light-dark(#3a83f7,#63a8f8);font:inherit;line-height:inherit;text-decoration:none;text-underline-offset:2px;cursor:pointer; }
+.dca-source a[href^="https://dsh-annotations.invalid/"]>svg { display:none; }
+.dca-source a[href^="https://dsh-annotations.invalid/"]:hover { text-decoration-line:underline;text-decoration-style:dashed;text-decoration-thickness:.5px; }
+.dca-source a[href^="https://dsh-annotations.invalid/"]:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary,#3a83f7);outline-offset:2px; }
+.dca-float.dca-citation-preview { display:flex;flex-direction:column;gap:8px;width:max-content;max-width:min(448px,calc(100vw - 24px));max-height:min(320px,calc(100vh - 24px));overflow-y:auto;padding:12px;border-radius:12px;font-size:14px;line-height:20px; }
+.dca-citation-label { font-size:12px;line-height:16px;font-weight:500;color:var(--dsw-alias-label-tertiary,light-dark(#8f8f8f,#afafaf)); }
+.dca-citation-text { margin-top:2px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text; }
+.dca-citation-code { margin:2px 0 0;max-height:192px;overflow:auto;border-radius:8px;padding:8px 12px;background:var(--dsw-alias-bg-layer-2,light-dark(#f3f4f5,#26272a));color:inherit;font-family:monospace;font-size:12px;line-height:16px;white-space:pre;user-select:text; }
 .dca-source>[data-dca-content] { isolation:isolate; }
 .dca-source [data-dca-content]::selection,.dca-source [data-dca-content] ::selection { background:#c3dcfd; }
 .dca-layer { position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2; }

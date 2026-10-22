@@ -1,9 +1,13 @@
 import { modelMessage, modelMessages } from './core.js';
+import { CITATION_GUIDANCE } from './citations.js';
 
-export const inject = ['sessions'];
+export const inject = ['sessions', 'systemPrompt'];
 
 /** Project public model readers, leaving durable events/UI and history caches intact. */
 export function apply(ctx) {
+  ctx.systemPrompt.section({ name: 'ui:annotation-citations',
+    order: ctx.systemPrompt.getSectionOrder('DELIVERABLE_FILE_REFERENCES') + 20,
+    text: CITATION_GUIDANCE, interpolate: false });
   const releases = new Map();
   const mount = session => {
     if (releases.has(session)) return;

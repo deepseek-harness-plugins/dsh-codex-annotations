@@ -110,10 +110,10 @@ export class AnnotationStore {
     for (const listener of this.listeners) listener();
     return result;
   }
-  add(selector) {
+  add(selector, reservedNumbers = []) {
     if (!selector.quote) throw new Error('请先选择原文。');
     return this.change(state => {
-      const used = new Set(state.annotations.map(a => a.number));
+      const used = new Set([...reservedNumbers, ...state.annotations.map(a => a.number)]);
       let number = 1;
       while (used.has(number)) number++;
       const note = { ...selector, id: uid(), number, comment: '',

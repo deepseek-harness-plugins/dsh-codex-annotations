@@ -173,8 +173,12 @@ test('宿主投影覆盖已打开和新会话，卸载后恢复原方法和原�
   existing.deriveMessages(); // Already cached before the plugin is enabled.
   const original = existing.deriveMessages;
   const originalEvent = existing.deriveEventMessage;
-  apply({ sessions: { list: () => [existing] }, on: (event, listener) => listeners.set(event, listener),
+  const sections = [];
+  apply({ systemPrompt: { section: section => sections.push(section), getSectionOrder: () => 9000 },
+    sessions: { list: () => [existing] }, on: (event, listener) => listeners.set(event, listener),
     effect: factory => { const cleanup = factory(); effects.push(cleanup); return cleanup; } });
+  assert.equal(sections[0].name, 'ui:annotation-citations');
+  assert.equal(sections[0].order, 9020);
   listeners.get('session/created')(future);
   assert.match(existing.deriveMessages()[0].content[0].text, /^\[用户批注\]/);
   assert.match(future.deriveMessages()[0].content[0].text, /^\[用户批注\]/);
