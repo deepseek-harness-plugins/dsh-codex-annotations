@@ -24,7 +24,7 @@ export function createRuntime(ctx) {
       const text = submissionText(options.text);
       return begin.call(this, text === options.text ? options : { ...options, text });
     }
-    session.beginSubmission = presentSubmission;
+    if (typeof begin === 'function') session.beginSubmission = presentSubmission;
     const restoreSubmission = () => {
       if (session.beginSubmission !== presentSubmission) return;
       if (descriptor) Object.defineProperty(session, 'beginSubmission', descriptor);
