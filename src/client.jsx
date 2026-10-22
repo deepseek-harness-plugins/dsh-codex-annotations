@@ -55,7 +55,11 @@ function Editor({ note, face, anchor, close, initiallyExpanded = true, viewport,
   const [expanded, setExpanded] = useState(initiallyExpanded), [draft, setDraft] = useState(note.comment);
   useEffect(() => { input.current?.focus({ preventScroll: true }); }, []);
   useLayoutEffect(() => { if (input.current) { input.current.style.height = 'auto'; input.current.style.height = `${Math.max(22, input.current.scrollHeight)}px`; } }, [draft, expanded]);
-  const save = () => { if (draft === note.comment || face.edit(note.id, { comment: draft }) !== false) close(); };
+  const save = () => {
+    if (draft !== note.comment && face.edit(note.id, { comment: draft }) === false) return;
+    close();
+    face.input.focus();
+  };
   return <Float anchor={anchor} gap={7} inset={90} className={`dca-editor ${expanded ? 'dca-editor-expanded' : 'dca-editor-compact'}`} onDismiss={close} viewport={viewport} reveal={reveal} avoid={avoid}>
     <textarea ref={input} aria-label={`批注 ${note.number} 的可选评论`} placeholder="添加可选评论…" rows={1} value={draft}
         onPointerDown={() => setExpanded(true)} onChange={e => { setExpanded(true); setDraft(e.target.value); }}

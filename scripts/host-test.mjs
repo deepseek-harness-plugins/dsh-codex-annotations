@@ -134,6 +134,12 @@ try {
     }, text);
     await page.getByRole('button', { name: '添加到对话', exact: true }).waitFor();
   };
+  const assertComposerFocused = async () => {
+    await page.waitForFunction(() => {
+      const editor = document.querySelector('[contenteditable=true]');
+      return document.activeElement === editor && editor.contains(getSelection()?.anchorNode);
+    }, null, { timeout: 2000 });
+  };
   const assertSentLayout = async (index, name, annotationOnly = false) => {
     const row = page.locator('.dca-user-message').nth(index);
     await row.scrollIntoViewIfNeeded();
@@ -253,6 +259,8 @@ try {
   await page.getByRole('button', { name: '批注 1，待发送', exact: true }).click();
   assert.equal(await comment.inputValue(), '', 'Cancel must preserve the saved comment');
   await comment.fill('测试1'); await screenshots('02-inline-comment'); await comment.press('Enter');
+  await assertComposerFocused();
+  assert.equal(await page.locator('.dca-user-message').count(), 0, 'Enter 保存批注只交还焦点，不同时发送对话');
   const countChip = page.locator('.dca-dock .dca-batch-chip');
   const chipAppearance = () => countChip.evaluate(el => {
     const label = el.querySelector('.dca-batch-open>span'), close = el.querySelector('.dca-chip-remove');
@@ -307,6 +315,14 @@ try {
   assert.equal(await previewInput.innerText(), tallDraft, 'Navigation must preserve the native composer draft');
   await screenshots('13-tall-composer-edit');
   await page.getByRole('button', { name: '取消', exact: true }).click();
+  await previewInput.click(); await previewInput.press('End'); await previewInput.press('ArrowLeft');
+  const caretBeforeSave = await previewInput.evaluate(() => ({ text: getSelection().anchorNode.textContent, offset: getSelection().anchorOffset }));
+  await page.getByRole('button', { name: '批注 1，待发送', exact: true }).click();
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await assertComposerFocused();
+  assert.equal(await previewInput.innerText(), tallDraft, '保存批注后输入框草稿不变');
+  await page.keyboard.insertText('光标验证');
+  assert.equal(await previewInput.innerText(), tallDraft.replace(caretBeforeSave.text, caretBeforeSave.text.slice(0, caretBeforeSave.offset) + '光标验证' + caretBeforeSave.text.slice(caretBeforeSave.offset)), '保存后恢复输入框原光标位置，可以直接继续输入');
   await previewInput.click(); await previewInput.press('ControlOrMeta+a'); await previewInput.press('Backspace');
   await page.waitForFunction(() => document.querySelector('[contenteditable=true]').innerText.trim() === '');
   await page.setViewportSize({ width: 480, height: 860 });
@@ -517,7 +533,10 @@ try {
   await rows.filter({ hasText: '批注交互预览' }).click();
   await select('这个插件会把选中的原文');
   await page.getByRole('button', { name:'添加到对话', exact:true }).click();
-  await page.keyboard.press('Escape'); await input.press('Enter');
+  await page.locator('.dca-editor textarea').click();
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await assertComposerFocused();
+  await page.keyboard.press('Enter');
   await page.locator('.dca-user-message').nth(3).waitFor();
   await assertSentLayout(3, 'annotation-only-message-layout', true);
   await page.getByRole('button', { name: '插件', exact: true }).click();
@@ -552,7 +571,7 @@ try {
   await writeFile(join(artifacts, 'ui-measurements.json'), JSON.stringify(uiMeasurements, null, 2));
   await writeFile(join(artifacts, 'verification.json'), JSON.stringify({ host: spawnSync(cli, ['--version'], {encoding:'utf8'}).stdout.trim(), isolatedHome: home, errors, acceptedUser: last,
     modelProjection: { persistedUser: durable, projectedNotes, teardownRestored: true, reactivationProjectedHistory: true, compactionProjected: true },
-    checks: ['native-child-slot-reasoning-body', 'sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'single-add-to-conversation-action', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
+    checks: ['save-restores-composer-focus-and-caret', 'save-then-Enter-sends-without-refocusing', 'native-child-slot-reasoning-body', 'sent-source-marks-cleared-and-stay-cleared-after-refresh', 'sent-native-selection-dismisses-on-next-click', 'enable-in-rendered-session', 'three-state-control-geometry', 'native-composer-chip', 'readable-count', 'cancel-preserves-comment', 'popup-pencil', 'long-answer-quote-jump-without-overlays', 'visible-clickable-quote-marker', 'tall-composer-and-editor-avoidance', 'navigation-preserves-draft', 'narrow-jump-and-edit', 'sent-quote-jump-without-overlays', 'editor-and-popup-delete', 'multiline-marker-clickable', 'single-add-to-conversation-action', 'optional-comment', 'separate-numbers', 'refresh-restores-reference', 'legacy-detached-notes-restored-without-reattach-button', 'CJK-and-English-input', 'native-Enter', 'model-exact-quotes', 'accepted-clears-pending', 'sent-links', 'multiline-code', 'dark', 'narrow-editor', 'one-click-clear-without-confirmation', 'clear-preserves-text-files-and-sent-notes', 'cleared-batch-stays-cleared-after-refresh', 'reuses-deleted-number', 'unchecked-retained', 'native-button', 'image-and-file', 'session-isolation', 'failed-serialization-restores', 'retry'] }, null, 2));
   console.log('PASS real DSH native input; screenshots and evidence in artifacts/');
 } catch (error) {
   if (page) { await screenshots('failure'); console.error(await page.locator('body').innerText()); }

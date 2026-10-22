@@ -68,7 +68,7 @@ Web 端将 `desktop` 换成 `web`。macOS 未配置 `dsh` 命令时，可使用�
 <p align="center"><img src="docs/assets/selection-menu.png" width="208" alt="划词后只显示添加到对话按钮"></p>
 
 1. **选择原文** — 选中助手回复中的文字，点击「添加到对话」。
-2. **添加评论** — 写下修改意见，也可以留空；点击「保存」或按 <kbd>Enter</kbd> 保存，<kbd>Shift</kbd> + <kbd>Enter</kbd> 换行。
+2. **添加评论** — 写下修改意见，也可以留空；点击「保存」或按 <kbd>Enter</kbd> 保存后，光标回到聊天输入框并保留原位置，可以继续输入或再按一次 <kbd>Enter</kbd> 发送。<kbd>Shift</kbd> + <kbd>Enter</kbd> 在评论中换行。
 3. **发送批注** — 继续添加其他批注，在聊天框输入要求，然后使用原生发送按钮或 <kbd>Enter</kbd> 发送。
 
 | 操作 | 效果 |
